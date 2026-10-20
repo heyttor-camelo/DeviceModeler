@@ -8,8 +8,11 @@ nó hidráulico (SWMM) e quantitativos.
 ```
 DeviceModeler.sln
 ├─ src/Modeler.Core           net8.0, sem nenhuma referência ao AutoCAD
+├─ src/Modeler.Civil3D        net8.0-windows, plugin do Civil 3D 2026 (comandos DM_*)
 ├─ tests/Modeler.Core.Tests   xUnit
-└─ catalog/exemplos/          definições .yaml (pv_retangular.yaml)
+├─ catalog/exemplos/          definições .yaml (pv_retangular.yaml)
+├─ deploy/                    bundle de autoload (PackageContents.xml)
+└─ tools/Install-Bundle.ps1   compila e instala o bundle
 ```
 
 Unidades: **metros, m², m³, m³/s**; ângulos de rotação e de conexão em **graus**
@@ -295,6 +298,10 @@ Com os valores padrão (L = B = 1,20; esp = 0,15; H = 1,50):
 | `Flow/` | `DeviceEvaluator`: parâmetros → variáveis → validações → fluxo → saídas |
 | `Csg/` | `CsgNode` imutáveis, `ICsgVisitor<T>`, `Vec3`, `NaiveVolume` (volume para conferência) |
 | `Results/` | `DeviceInstance`, `NamedSolid`, `Connector`, `SwmmJunction`, `Quantity`, `GripInstance`, `ConnectionInput` |
+| `Geometry/` | `Placement` (local ↔ desenho) e `ConnectionGeometry` (tubo → conexão) |
+| `Persistence/` | `ParameterCodec`: parâmetros ↔ JSON (gravado no Xrecord) |
+| `Editing/` | `DeviceEditing`: valor por grip, reconciliação com nova versão, deslocamento de cotas |
+| `Export/` | `Reports`: totais, CSV de quantitativos, `[JUNCTIONS]`/`[COORDINATES]` do SWMM |
 
 Decisões de projeto:
 
@@ -307,34 +314,98 @@ Decisões de projeto:
 - **Árvore CSG só com dados:** nada de malha nem de AutoCAD no Core. A geometria real fica com quem
   implementa `ICsgVisitor<T>`.
 
-## Fase 2 (planejada, ainda não implementada): `Modeler.Civil3D`
+## Fase 2: plugin do Civil 3D (`Modeler.Civil3D`)
 
-`net8.0-windows`, com referências a `AcDbMgd`, `AcMgd`, `AcCoreMgd` e `AeccDbMgd` da instalação do
-Civil 3D 2026 (Copy Local = false).
+`net8.0-windows`, x64. Referencia `acdbmgd`, `acmgd`, `accoremgd`, `AeccDbMgd` e `AecBaseMgd` da
+instalação do Civil 3D 2026 com `Private=False` (Copy Local = false). Se o Civil 3D não estiver
+instalado, usa a cópia em `refs\acad2026\` (ignorada pelo git). Também dá para forçar uma pasta:
+`dotnet build -p:AcadDir=...`.
 
-1. **`Solid3dBuilder : ICsgVisitor<Solid3d>`**
-   - prisma → `Solid3d.CreateBox` + deslocamento;
-   - cilindro → `CreateFrustum` + alinhamento ao eixo;
-   - booleanas → `BooleanOperation`;
-   - `TranslateNode`/`RotateNode` → `TransformBy`;
-   - `ArrayNode` → cópias + união.
-   - No fim, a transformação de inserção: XY do ponto e rotação em Z.
-2. **Persistência:** um Xrecord no dicionário de extensão do `Solid3d`, com `Id`, `Version`, `Hash`
-   da definição e `inst.Parameters`. O `Hash` permite avisar que a definição mudou e oferecer
-   regeneração. Cada `NamedSolid` vira uma entidade, com camada/material vindos do nome e do
-   `Material`.
-3. **Comandos:**
-   - inserir: escolher a definição, informar o ponto e os parâmetros (paleta usando `rotulo`/`grupo`);
-   - editar: ler o Xrecord, rodar `Evaluate` e substituir os sólidos.
-   - Os grips vêm de `inst.Grips` (GripOverrule). Os conectores ligam pipes de Pipe Network e
-     preenchem `Conexoes`. O `alvo` puxa cotas de superfície ou de tubo.
-4. **Hidráulica:** `SwmmJunction` → seção `[JUNCTIONS]` do `.inp`.
-5. **Categoria `linear`:** seção transversal varrida ao longo de alinhamento/perfil (sarjetas,
-   valetas), com um `Comprimento` implícito nos quantitativos.
+### Compilar e carregar
 
-Próximas evoluções da linguagem, inspiradas no que já funciona bem em ferramentas do gênero:
+```bash
+dotnet build DeviceModeler.sln
+```
 
-- **presets de catálogo:** escolher um código do álbum DNIT IPR 736 preenche as dimensões, e editar
-  uma dimensão manualmente muda o código para "genérico";
-- uma operação pronta de furo em conector;
-- nós SWMM de armazenamento (storage) e de descarga (outfall).
+A saída fica em `NETLOAD\`: `Modeler.Civil3D.dll`, `Modeler.Core.dll`, `YamlDotNet.dll` e
+`catalog\`. No Civil 3D, rode `NETLOAD` em `NETLOAD\Modeler.Civil3D.dll`. Para carregar
+automaticamente ao abrir o Civil 3D, instale o bundle com o Civil 3D fechado:
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools/Install-Bundle.ps1
+```
+
+`-Remove` desinstala o bundle. O manifesto `deploy/DeviceModeler.bundle/PackageContents.xml` vale
+para a série R25.1 (Civil 3D 2026).
+
+### Comandos
+
+| Comando | O que faz |
+|---------|-----------|
+| `DM_INSERIR` | Abre uma janela com a lista do catálogo, o PropertyGrid dos parâmetros e um resumo que se recalcula a cada alteração (variáveis, quantitativos, avisos e erros; o OK só é habilitado quando tudo é válido). Depois pede o ponto e a rotação com jig e, se a definição tiver `alvo: superficie`, a superfície da cota da tampa |
+| `DM_EDITAR` | Mesma janela, com os valores atuais; regenera ao confirmar |
+| *grips* | Cada parâmetro com `grip:` ganha um grip. Clicar nele inicia `DM_GRIP`, que pede o novo ponto e aplica fator e min/max |
+| `DM_CONECTAR` | Liga tubos de Pipe Network ao dispositivo (substitui ou adiciona). Preenche `Conexoes` (ângulo, cota de fundo, diâmetros interno e externo, handle) e os parâmetros com `alvo: tubo` (menor cota de fundo). O PV abre os furos e cria os conectores |
+| `DM_SUPERFICIE` | Parâmetros com `alvo: superficie` passam a valer a cota da superfície no ponto de inserção |
+| `DM_ATUALIZAR` | Relê os tubos (pelo handle) e o catálogo e regenera; avisa quando a definição mudou (hash) |
+| `DM_AUTO` | Liga ou desliga a atualização automática: se um tubo ligado mudar, o dispositivo se refaz ao fim do comando |
+| `DM_QUANTITATIVOS` | Totais por quantitativo na linha de comando, mais CSV detalhado (`;`) |
+| `DM_SWMM` | Grava `[JUNCTIONS]` e `[COORDINATES]` de todos os dispositivos num `.inp` |
+| `DM_INFO` | Mostra parâmetros, variáveis, quantitativos, conectores (em coordenadas do desenho) e o nó SWMM |
+| `DM_CATALOGO` | Mostra ou troca a pasta do catálogo (gravada em `%APPDATA%\DeviceModeler\settings.json`) e lista as definições e os erros |
+
+### Como fica no DWG
+
+O desenho é inspirado na arquitetura do SOLIDOS, estudada por engenharia reversa (só os mecanismos;
+o código é próprio):
+
+- **Hospedeiro:** um `BlockReference` de um **bloco anônimo exclusivo**. Cada sólido de saída é um
+  `Solid3d` dentro do bloco, na camada `DM-<NOME>` (ex.: `DM-CONCRETO`), com material quando
+  existir um com esse nome no desenho. Sem o plugin, o desenho continua válido: é um bloco comum.
+- **Dados:** Xrecord `DEVICEMODELER` no dicionário de extensão da referência, com marcador, versão
+  do esquema, id, versão e hash da definição, caminho do YAML, nome da instância e os parâmetros em
+  JSON (`ParameterCodec`), em pedaços com código 300.
+- **Posição:** o bloco tem origem 0, e as coordenadas do bloco são o sistema local do dispositivo
+  (Z = cota). Mover e girar a referência é suficiente.
+- **Regeneração** (`DeviceService.Regenerate`):
+  - reconcilia os valores com a definição atual (`DeviceEditing.Reconcile`);
+  - se a referência foi deslocada em Z, soma o deslocamento às cotas e zera o Z;
+  - restaura escala 1;
+  - apaga o conteúdo do bloco e o recria. Se o bloco for compartilhado por cópias (COPY/ARRAY),
+    a referência editada ganha um bloco novo antes.
+- **Grips:** um `GripOverrule` registrado em `BlockReference`, filtrado pelo dicionário de extensão
+  (`SetExtensionDictionaryEntryFilter`). A geometria nunca é refeita dentro do overrule: o clique
+  no grip dispara o comando `DM_GRIP`.
+- **Tubos:** `ObjectModified` só enfileira o handle do tubo; o processamento acontece em
+  `CommandEnded`, com o documento travado, ignorando UNDO/REDO e os próprios comandos.
+
+### Testes
+
+- O que não depende do CAD está no Core e é coberto por `dotnet test`: `Placement`,
+  `ConnectionGeometry`, `ParameterCodec`, `DeviceEditing` (grips, reconciliação, deslocamento de
+  cotas) e `Reports` (CSV e SWMM).
+- O plugin em si só pode ser verificado dentro do Civil 3D, com o roteiro abaixo.
+
+**Roteiro de teste manual no Civil 3D 2026:**
+
+1. `NETLOAD` e `DM_CATALOGO`: deve listar `pv_retangular`.
+2. `DM_INSERIR` → PV retangular → mude `CotaTampa` para 103 e veja o resumo recalcular. Ponha
+   `L = 5`: o PropertyGrid recusa. Clique em OK, escolha o ponto e a rotação, pule a superfície.
+3. Confira as camadas `DM-CONCRETO`, `DM-DEGRAUS` (H > 2 m) e `DM-TAMPA`.
+4. Selecione o PV, clique no grip de `L` e arraste: o PV se refaz com o novo comprimento.
+5. Desenhe uma rede de tubos chegando ao PV e rode `DM_CONECTAR`: aparecem os furos e
+   `CotaFundo` passa a valer a menor cota de fundo.
+6. Mova a ponta de um tubo: com `DM_AUTO` ligado, o furo acompanha.
+7. `COPY` o PV e edite a cópia com `DM_EDITAR`: o original não muda.
+8. `DM_QUANTITATIVOS` (salve o CSV), `DM_SWMM` (abra o `.inp` no SWMM 5) e `DM_INFO`.
+9. `UNDO` depois de cada passo: tudo volta.
+
+### Limitações atuais e próximos passos
+
+- A categoria `linear` (seção varrida ao longo de alinhamento/perfil, para sarjetas e valetas)
+  ainda não tem gerador.
+- O grip pede o ponto final, mas ainda não mostra a prévia da geometria durante o arrasto.
+- A superfície não é acompanhada automaticamente: rode `DM_SUPERFICIE` de novo.
+- **Presets de catálogo:** escolher um código do álbum DNIT IPR 736 preencherá as dimensões, e
+  editar uma dimensão manualmente mudará o código para "genérico".
+- Nós SWMM de armazenamento (storage) e de descarga (outfall), e exportação dos condutos.
