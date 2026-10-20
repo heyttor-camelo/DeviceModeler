@@ -54,6 +54,18 @@ public class FlowTests
     }
 
     [Fact]
+    public void Expressao_pode_continuar_na_linha_seguinte()
+    {
+        var def = Def("""
+            fluxo:
+              - corpo = subtrair(prisma(2, 2, 2),
+                                 prisma(1, 1, 1, [0, 0, 1]))
+              - expor_solido("corpo", corpo)
+            """);
+        Assert.Equal(7.0, NaiveVolume.Of(def.Evaluate().Solids["corpo"].Node), 9);
+    }
+
+    [Fact]
     public void Intersectar_e_rotacionar()
     {
         var def = Def("""
