@@ -24,4 +24,9 @@
     <ProjectReference Include="..\..\src\Modeler.Core\Modeler.Core.csproj" />
   </ItemGroup>
 
+  <!-- Os testes usam os arquivos reais do catálogo. -->
+  <ItemGroup>
+    <None Include="..\..\catalog\**\*.yaml" Link="catalog\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
