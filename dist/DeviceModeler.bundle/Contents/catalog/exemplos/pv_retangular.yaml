@@ -1,0 +1,142 @@
+# Poço de visita retangular de concreto moldado no local.
+# Sistema local: X/Y a partir do centro do PV (ponto de inserção), Z = cota absoluta.
+# Unidades: metros, m², m³; ângulos em graus.
+
+dispositivo: pv_retangular
+nome: Poço de visita retangular
+versao: 1.0.0
+categoria: pontual
+descricao: >
+  PV retangular aberto no topo: laje de fundo + paredes de espessura 'esp',
+  degraus de acesso a cada 0,30 m quando a altura útil passa de 2,00 m e
+  furos nas paredes para cada tubo conectado.
+
+parametros:
+  L:
+    tipo: comprimento
+    padrao: 1.20
+    min: 0.80
+    max: 3.00
+    rotulo: Comprimento interno
+    grupo: Geometria
+    grip: { eixo: x, posicao: "[Lext/2, 0, CotaTampa]", fator: 2 }
+  B:
+    tipo: comprimento
+    padrao: 1.20
+    min: 0.80
+    max: 3.00
+    rotulo: Largura interna
+    grupo: Geometria
+    grip: { eixo: y, posicao: "[0, Bext/2, CotaTampa]", fator: 2 }
+  esp:
+    tipo: comprimento
+    padrao: 0.15
+    min: 0.10
+    max: 0.40
+    rotulo: Espessura das paredes e do fundo
+    grupo: Geometria
+  CotaFundo:
+    tipo: cota
+    padrao: 100.00
+    rotulo: Cota de fundo (interna)
+    grupo: Cotas
+    alvo: tubo
+  CotaTampa:
+    tipo: cota
+    padrao: 101.50
+    rotulo: Cota da tampa
+    grupo: Cotas
+    alvo: superficie
+    grip: { eixo: z, posicao: "[0, 0, CotaTampa]" }
+  tampa:
+    tipo: texto
+    valores: [T600, T900]
+    padrao: T600
+    rotulo: Tampão (diâmetro útil em mm)
+    grupo: Acabamento
+  folga:
+    tipo: comprimento
+    padrao: 0.30
+    min: 0.00
+    max: 1.00
+    rotulo: Folga lateral da escavação
+    grupo: Escavação
+  lastro:
+    tipo: comprimento
+    padrao: 0.10
+    min: 0.00
+    max: 0.50
+    rotulo: Espessura do lastro sob o fundo
+    grupo: Escavação
+  Conexoes:
+    tipo: conexoes
+    padrao: []
+    descricao: Tubos ligados {nome, angulo (graus), cota (geratriz inferior interna), diametro (interno), diametro_externo}
+
+variaveis:
+  H:
+    valor: CotaTampa - CotaFundo
+    unidade: m
+    descricao: Altura útil interna
+  Lext: L + 2*esp
+  Bext: B + 2*esp
+  d_tampa: se(tampa == "T600", 0.60, 0.90)
+  # Degraus a cada 0,30 m a partir de 0,30 m do fundo, sem passar de H - 0,30 m.
+  n_degraus: se(H > 2.0, floor(round((H - 0.30) / 0.30, 6)), 0)
+
+validacoes:
+  - condicao: H >= 0.60
+    mensagem: "Altura útil H = {H} m menor que o mínimo de 0.60 m (verifique CotaTampa e CotaFundo)"
+  - condicao: H <= 6.0
+    mensagem: "Altura útil H = {H} m acima de 6 m: verificar dimensionamento estrutural"
+    nivel: aviso
+
+fluxo:
+  - externo = prisma(Lext, Bext, H + esp, [0, 0, CotaFundo - esp])
+  - interno = prisma(L, B, H, [0, 0, CotaFundo])
+  - corpo = subtrair(externo, interno)
+
+  - degraus = vazio()
+  - se: H > 2.0
+    entao:
+      - degrau = cilindro(0.025, 0.30, [-L/2 + 0.10, -0.15, CotaFundo + 0.30], "y")
+      - degraus = array_z(degrau, n_degraus, 0.30)
+
+  # Um furo (diâmetro externo do tubo + 5 cm de folga em cada lado), centrado no eixo do tubo
+  # (cota + diâmetro interno / 2), e um conector por tubo ligado.
+  - furos_m3 = 0
+  - para cada: c em Conexoes
+    faca:
+      - a = rad(c.angulo)
+      - dist = min(se(abs(cos(a)) > 1e-9, (Lext/2) / abs(cos(a)), 1e9), se(abs(sin(a)) > 1e-9, (Bext/2) / abs(sin(a)), 1e9))
+      - zc = c.cota + c.diametro/2
+      - d_furo = c.diametro_externo + 0.10
+      - furo = cilindro(d_furo, dist + 0.05, [0, 0, zc], "x")
+      - corpo = subtrair(corpo, rotacionar(furo, c.angulo))
+      - furos_m3 = furos_m3 + pi * d_furo^2 / 4 * esp
+      - conector(c.nome, polar(c.angulo, dist, zc), [cos(a), sin(a), 0], c.diametro)
+
+  - expor_solido("concreto", corpo, "Concreto")
+  - expor_solido("degraus", degraus, "Aço")
+
+saidas:
+  solidos:
+    tampa:
+      solido: cilindro(d_tampa, 0.05, [0, 0, CotaTampa - 0.05], "z")
+      material: Ferro fundido
+  hidraulica:
+    swmm_juncao:
+      cota_fundo: CotaFundo
+      profundidade_maxima: H
+  quantitativos:
+    concreto_m3:
+      valor: Lext * Bext * (H + esp) - L * B * H - furos_m3
+      descricao: Concreto do corpo (fundo + paredes), descontados os furos
+    forma_m2:
+      valor: 2 * (Lext + Bext) * (H + esp) + 2 * (L + B) * H
+      descricao: Fôrma das faces externas e internas
+    escavacao_m3:
+      valor: (Lext + 2*folga) * (Bext + 2*folga) * (H + esp + lastro)
+      descricao: Escavação em cava retangular com folga lateral
+    lastro_m3: (Lext + 2*folga) * (Bext + 2*folga) * lastro
+    degraus_un: n_degraus

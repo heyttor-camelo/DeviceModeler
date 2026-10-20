@@ -335,7 +335,18 @@ automaticamente ao abrir o Civil 3D, instale o bundle com o Civil 3D fechado:
 powershell -ExecutionPolicy Bypass -File tools/Install-Bundle.ps1
 ```
 
-`-Remove` desinstala o bundle. O manifesto `deploy/DeviceModeler.bundle/PackageContents.xml` vale
+`-Remove` desinstala o bundle.
+
+**Sem compilar (outra máquina):** o repositório traz o bundle pronto em `dist/DeviceModeler.bundle`.
+Copie a pasta inteira para `%APPDATA%\Autodesk\ApplicationPlugins\` e abra o Civil 3D 2026. A DLL é
+net8.0, compilada contra o Civil 3D 2026 25.1.60, e carrega também nos builds mais novos, que rodam
+em .NET 10. Para regenerar o bundle depois de mudar o código, rode
+`powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1`. As DLLs da Autodesk nunca vão para
+o repositório.
+
+**Alvo .NET 8 ou 10:** a partir do build 25.1.179, o Civil 3D 2026 roda em .NET 10. O csproj lê
+`acdbmgd.runtimeconfig.json` da instalação usada como referência e compila para `net10.0-windows`
+quando é o caso; caso contrário, compila para `net8.0-windows`. O manifesto `deploy/DeviceModeler.bundle/PackageContents.xml` vale
 para a série R25.1 (Civil 3D 2026).
 
 ### Comandos
