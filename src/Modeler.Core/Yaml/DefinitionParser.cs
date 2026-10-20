@@ -642,7 +642,7 @@ internal sealed partial class DefinitionParser
             case CallNode call:
                 if (!_functions.Contains(call.Name))
                 {
-                    var names = _functions.All.Select(f => f.Name).Distinct().Append("se");
+                    var names = _functions.Names.Append("se");
                     throw new DefinitionException($"função desconhecida '{call.Name}'{Suggestion(call.Name, names)}",
                         expression.LocationAt(call.Position), expression.Field);
                 }
@@ -671,9 +671,14 @@ internal sealed partial class DefinitionParser
 
     private static string Suggestion(string name, IEnumerable<string> candidates)
     {
+        var lower = name.ToLowerInvariant();
         var best = candidates
-            .Select(c => (Name: c, Distance: Levenshtein(name.ToLowerInvariant(), c.ToLowerInvariant())))
-            .Where(c => c.Distance <= Math.Max(1, name.Length / 3))
+            .Select(c => (Name: c, Distance: Levenshtein(lower, c.ToLowerInvariant())))
+            // prefixo com 3+ letras também conta ("minimo" → "min")
+            .Where(c => c.Distance <= Math.Max(1, name.Length / 3) ||
+                        (Math.Min(lower.Length, c.Name.Length) >= 3 &&
+                         (lower.StartsWith(c.Name.ToLowerInvariant(), StringComparison.Ordinal) ||
+                          c.Name.ToLowerInvariant().StartsWith(lower, StringComparison.Ordinal))))
             .OrderBy(c => c.Distance)
             .FirstOrDefault();
         return best.Name is null ? "" : $" (você quis dizer '{best.Name}'?)";

@@ -181,12 +181,18 @@ internal static class BuiltinFunctions
         return skipEmpty ? result.Where(s => s is not EmptyNode).ToList() : result;
     }
 
-    private static CsgNode Union(List<CsgNode> solids) => solids.Count switch
+    /// <summary>Uniões aninhadas são achatadas: unir(unir(a, b), c) = unir(a, b, c) — na Fase 2
+    /// isso vira uma única sequência de BooleanOperation.</summary>
+    private static CsgNode Union(List<CsgNode> solids)
     {
-        0 => EmptyNode.Instance,
-        1 => solids[0],
-        _ => new UnionNode(solids),
-    };
+        var flat = solids.SelectMany(s => s is UnionNode u ? u.Children : new[] { s }).ToList();
+        return flat.Count switch
+        {
+            0 => EmptyNode.Instance,
+            1 => flat[0],
+            _ => new UnionNode(flat),
+        };
+    }
 
     private static CsgNode Wrap(CsgNode solid, Func<CsgNode, CsgNode> transform) =>
         solid is EmptyNode ? solid : transform(solid);

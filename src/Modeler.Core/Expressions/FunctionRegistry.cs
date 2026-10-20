@@ -207,7 +207,10 @@ public sealed class FunctionRegistry
     /// <summary>Matemática, listas, geometria CSG e saídas do fluxo.</summary>
     public static FunctionRegistry Default { get; } = CreateDefault();
 
-    public IEnumerable<FunctionDef> All => _functions.Values;
+    public IEnumerable<FunctionDef> All => _functions.Values.Distinct();
+
+    /// <summary>Nomes e apelidos registrados.</summary>
+    public IEnumerable<string> Names => _functions.Keys;
 
     public static FunctionRegistry CreateDefault()
     {
