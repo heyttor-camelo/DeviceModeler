@@ -356,8 +356,7 @@ para a série R25.1 (Civil 3D 2026).
 
 ### Como fica no DWG
 
-O desenho é inspirado na arquitetura do SOLIDOS, estudada por engenharia reversa (só os mecanismos;
-o código é próprio):
+O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (implementação própria):
 
 - **Hospedeiro:** um `BlockReference` de um **bloco anônimo exclusivo**. Cada sólido de saída é um
   `Solid3d` dentro do bloco, na camada `DM-<NOME>` (ex.: `DM-CONCRETO`), com material quando
