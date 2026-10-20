@@ -29,8 +29,10 @@ public sealed record Quantity(string Name, double Value, string Unit, string? De
 public sealed record GripInstance(string Parameter, Vec3 Position, Vec3 Direction, double Factor);
 
 /// <summary>Conexão de tubo informada ao avaliar (na Fase 2 vem dos tubos ligados).
-/// Ângulo em graus (planta, a partir de +X local, anti-horário); cota = geratriz inferior do tubo.</summary>
-public sealed record ConnectionInput(string Name, double Angle, double InvertElevation, double Diameter);
+/// Ângulo em graus (planta, a partir de +X local, anti-horário) apontando do dispositivo para o tubo;
+/// cota = geratriz inferior interna (invert); diâmetro interno; diâmetro externo opcional (padrão = interno);
+/// <paramref name="Reference"/> identifica o objeto de origem (handle do tubo no DWG).</summary>
+public sealed record ConnectionInput(string Name, double Angle, double InvertElevation, double Diameter, double? OuterDiameter = null, string? Reference = null);
 
 public interface INamed
 {

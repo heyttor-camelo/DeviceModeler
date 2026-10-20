@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -220,11 +220,11 @@ internal sealed partial class DefinitionParser
 
     private Dictionary<string, object> ParseConnection(YamlNode node, string field)
     {
-        var fields = Fields(Map(node, field), field, "nome", "angulo", "cota", "diametro");
+        var fields = Fields(Map(node, field), field, ParameterDef.ConnectionFields.ToArray());
         var result = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (var (key, value) in fields)
         {
-            result[key] = key == "nome" ? Scalar(value, $"{field}.{key}") : Number(value, $"{field}.{key}");
+            result[key] = key is "nome" or "ref" ? Scalar(value, $"{field}.{key}") : Number(value, $"{field}.{key}");
         }
 
         return result;

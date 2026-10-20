@@ -28,7 +28,7 @@ public enum ParameterType
     Texto,
     Booleano,
 
-    /// <summary>Lista de conexões de tubo: registros {nome, angulo, cota, diametro}.</summary>
+    /// <summary>Lista de conexões de tubo: registros {nome, angulo, cota, diametro, diametro_externo?, ref?}.</summary>
     Conexoes,
 }
 
@@ -183,6 +183,7 @@ public sealed class ParameterDef
                 ConnectionInput c => new Dictionary<string, object?>
                 {
                     ["nome"] = c.Name, ["angulo"] = c.Angle, ["cota"] = c.InvertElevation, ["diametro"] = c.Diameter,
+                    ["diametro_externo"] = c.OuterDiameter, ["ref"] = c.Reference,
                 },
                 IReadOnlyDictionary<string, object> d => d.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
                 IDictionary<string, object> d => d.ToDictionary(kv => kv.Key, kv => (object?)kv.Value),
@@ -206,10 +207,10 @@ public sealed class ParameterDef
             return d;
         }
 
-        var unknown = record.Keys.Except(new[] { "nome", "angulo", "cota", "diametro" }).ToList();
+        var unknown = record.Keys.Except(ConnectionFields).ToList();
         if (unknown.Count > 0)
         {
-            throw Fail($"conexão {index}: campo(s) desconhecido(s) {string.Join(", ", unknown)} (use nome, angulo, cota, diametro)");
+            throw Fail($"conexão {index}: campo(s) desconhecido(s) {string.Join(", ", unknown)} (use {string.Join(", ", ConnectionFields)})");
         }
 
         var diameter = Number("diametro");
@@ -218,14 +219,26 @@ public sealed class ParameterDef
             throw Fail($"conexão {index}: diametro deve ser maior que zero");
         }
 
+        // Opcionais: diâmetro externo (padrão = diametro) e referência ao objeto de origem (handle do tubo na Fase 2).
+        var outer = record.TryGetValue("diametro_externo", out var o) && o is not null ? Number("diametro_externo") : diameter;
+        if (outer < diameter)
+        {
+            throw Fail($"conexão {index}: diametro_externo menor que diametro");
+        }
+
         return new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["nome"] = record.TryGetValue("nome", out var n) && n is string s && s.Length > 0 ? s : $"C{index}",
             ["angulo"] = Number("angulo"),
             ["cota"] = Number("cota"),
             ["diametro"] = diameter,
+            ["diametro_externo"] = outer,
+            ["ref"] = record.TryGetValue("ref", out var r) && r is string text ? text : "",
         };
     }
+
+    /// <summary>Campos aceitos num registro de conexão.</summary>
+    public static readonly IReadOnlyList<string> ConnectionFields = new[] { "nome", "angulo", "cota", "diametro", "diametro_externo", "ref" };
 
     internal static bool? ParseBool(string text) => text.Trim().ToLowerInvariant() switch
     {

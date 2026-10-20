@@ -71,7 +71,7 @@ parametros:
   Conexoes:
     tipo: conexoes
     padrao: []
-    descricao: Tubos ligados {nome, angulo (graus), cota (geratriz inferior), diametro}
+    descricao: Tubos ligados {nome, angulo (graus), cota (geratriz inferior interna), diametro (interno), diametro_externo}
 
 variaveis:
   H:
@@ -102,16 +102,18 @@ fluxo:
       - degrau = cilindro(0.025, 0.30, [-L/2 + 0.10, -0.15, CotaFundo + 0.30], "y")
       - degraus = array_z(degrau, n_degraus, 0.30)
 
-  # Um furo (tubo + 5 cm de folga em cada lado) e um conector por tubo ligado.
+  # Um furo (diâmetro externo do tubo + 5 cm de folga em cada lado), centrado no eixo do tubo
+  # (cota + diâmetro interno / 2), e um conector por tubo ligado.
   - furos_m3 = 0
   - para cada: c em Conexoes
     faca:
       - a = rad(c.angulo)
       - dist = min(se(abs(cos(a)) > 1e-9, (Lext/2) / abs(cos(a)), 1e9), se(abs(sin(a)) > 1e-9, (Bext/2) / abs(sin(a)), 1e9))
       - zc = c.cota + c.diametro/2
-      - furo = cilindro(c.diametro + 0.10, dist + 0.05, [0, 0, zc], "x")
+      - d_furo = c.diametro_externo + 0.10
+      - furo = cilindro(d_furo, dist + 0.05, [0, 0, zc], "x")
       - corpo = subtrair(corpo, rotacionar(furo, c.angulo))
-      - furos_m3 = furos_m3 + pi * (c.diametro + 0.10)^2 / 4 * esp
+      - furos_m3 = furos_m3 + pi * d_furo^2 / 4 * esp
       - conector(c.nome, polar(c.angulo, dist, zc), [cos(a), sin(a), 0], c.diametro)
 
   - expor_solido("concreto", corpo, "Concreto")
