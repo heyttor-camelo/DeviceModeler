@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Plugin do Civil 3D 2026 (.NET 8). Converte a árvore CSG do Modeler.Core em Solid3d,
+    grava os parâmetros no DWG (Xrecord) e oferece os comandos DM_*.
+
+    Referências: instalação do Civil 3D 2026; se ela não existir (ex.: máquina de build),
+    usa a cópia local em refs\acad2026 (não versionada). Copy Local = false (Private=False).
+    Saída: NETLOAD\Modeler.Civil3D.dll (+ Modeler.Core.dll, YamlDotNet.dll e catalog\).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <AssemblyName>Modeler.Civil3D</AssemblyName>
+    <RootNamespace>Modeler.Civil3D</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- as DLLs do AutoCAD referenciam WPF (WindowsBase); sem isso há conflito de versões -->
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <Deterministic>true</Deterministic>
+
+    <AcadDir Condition="'$(AcadDir)' == '' And Exists('$(ProgramFiles)\Autodesk\AutoCAD 2026\acdbmgd.dll')">$(ProgramFiles)\Autodesk\AutoCAD 2026</AcadDir>
+    <AcadDir Condition="'$(AcadDir)' == ''">$(MSBuildThisFileDirectory)..\..\refs\acad2026</AcadDir>
+
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\NETLOAD\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <!-- copia YamlDotNet.dll para junto do plugin (o Civil 3D não o fornece) -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modeler.Core\Modeler.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="accoremgd">
+      <HintPath>$(AcadDir)\accoremgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="acdbmgd">
+      <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="acmgd">
+      <HintPath>$(AcadDir)\acmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AecBaseMgd">
+      <HintPath>$(AcadDir)\ACA\AecBaseMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AeccDbMgd">
+      <HintPath>$(AcadDir)\C3D\AeccDbMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- catálogo vai junto da DLL: NETLOAD\catalog\... -->
+  <ItemGroup>
+    <None Include="..\..\catalog\**\*.yaml" Link="catalog\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CheckAcadDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(AcadDir)\acdbmgd.dll')"
+           Text="Não achei acdbmgd.dll em '$(AcadDir)'. Instale o Civil 3D 2026 ou copie as DLLs de referência para refs\acad2026 (ver README)." />
+    <Error Condition="!Exists('$(AcadDir)\C3D\AeccDbMgd.dll')"
+           Text="Não achei C3D\AeccDbMgd.dll em '$(AcadDir)' (é preciso o Civil 3D, não só o AutoCAD)." />
+  </Target>
+
+  <Target Name="ShowNetloadPath" AfterTargets="Build">
+    <Message Importance="high" Text="DLL pronta para NETLOAD (referências de $(AcadDir)): $(TargetPath)" />
+  </Target>
+
+</Project>

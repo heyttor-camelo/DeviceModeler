@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # DLLs de referência do AutoCAD/Civil 3D (cópia local só para compilar; não versionar)
 refs/
+
+# saída do plugin (NETLOAD)
+NETLOAD/
