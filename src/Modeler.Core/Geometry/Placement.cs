@@ -40,6 +40,9 @@ public readonly record struct Placement(Vec3 Origin, double RotationDegrees)
         return new Vec3((world.X * cos) + (world.Y * sin), (-world.X * sin) + (world.Y * cos), world.Z);
     }
 
+    /// <summary>A mesma transformação como <see cref="Affine"/> (para percorrer a árvore CSG já no desenho).</summary>
+    public Affine ToAffine() => Affine.Translation(Origin).Then(Affine.Rotation(RotationDegrees, Vec3.UnitZ, Vec3.Zero));
+
     /// <summary>Ângulo em graus no intervalo [0, 360).</summary>
     public static double NormalizeAngle(double degrees)
     {

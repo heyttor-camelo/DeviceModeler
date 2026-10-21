@@ -20,8 +20,11 @@ Usuário: Heyttor (engenheiro civil, fala português). Responda em **português*
 ```
 DeviceModeler.sln
 ├─ src/Modeler.Core          net8.0, SEM AutoCAD — linguagem, avaliação, CSG, codec, relatórios
-├─ src/Modeler.Civil3D       plugin (net8.0-windows ou net10.0-windows, auto) — comandos DM_*
-├─ tests/Modeler.Core.Tests  xUnit (114 testes) — tudo que não depende do CAD
+├─ src/Modeler.Civil3D       plugin (net8.0-windows ou net10.0-windows, auto) — comandos DM_* e C3DHYDRO
+│   ├─ Infra/                log comum (HydroLog) e progresso (Progress)
+│   ├─ Ui/Common/            tema, estilos, ícones 32×32, janela de progresso e de log (molde do Viário)
+│   └─ Ui/Panel/             painel HYDRO: janela, monitor e uma classe por categoria
+├─ tests/Modeler.Core.Tests  xUnit — tudo que não depende do CAD
 ├─ catalog/exemplos/         pv_retangular.yaml (caso de teste principal)
 ├─ deploy/                   PackageContents.xml do bundle + aviso de terceiros
 ├─ dist/DeviceModeler.bundle bundle PRONTO (DLLs versionadas de propósito), gerado por tools/Build-Dist.ps1
@@ -47,9 +50,13 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
   - O `dist/` é sempre net8, compilado contra `refs/acad2026` (25.1.60), e carrega nos dois.
   - Sem `refs/`, `Build-Dist.ps1` usa a instalação local. Num Civil 3D .NET 8 isso também dá net8.
 - `AcadDir` pode ser forçado: `dotnet build -p:AcadDir=C:\caminho`.
-- Saída local: `NETLOAD\` (ignorado pelo git): `Modeler.Civil3D.dll` + `Modeler.Core.dll` +
-  `YamlDotNet.dll` + `catalog\`. **As três DLLs precisam ficar juntas.** Se copiar só a principal,
-  dá `FileNotFoundException: Modeler.Core` (já aconteceu).
+- Saída local: `NETLOAD\` (ignorado pelo git): **DLL única** `Modeler.Civil3D.dll` + `catalog\`.
+  O alvo `EmbedDependencies` do csproj embute `Modeler.Core.dll` e `YamlDotNet.dll` como recursos
+  `Embedded.<nome>.dll`, e o `EmbeddedAssemblies` (com `[ModuleInitializer]`) os carrega no mesmo
+  `AssemblyLoadContext` do plugin. O catálogo também vai embutido (`Catalog/...`) e é extraído para
+  `%APPDATA%\DeviceModeler\catalog` quando não há `catalog\` ao lado da DLL. Antes disso, copiar só
+  a DLL principal dava `FileNotFoundException: Modeler.Core`. Restos antigos de `Modeler.Core.dll`
+  na saída são apagados pelo alvo `RemoveStaleDependencies`.
 
 ## Convenções
 
@@ -131,9 +138,21 @@ O que se aprendeu:
   DM_QUANTITATIVOS, DM_SWMM, DM_INFO e DM_CATALOGO.
 - Janela com PropertyGrid e resumo ao vivo, jig de inserção e bundle de autoload.
 
+**HYDRO F0 (fundação), implementada (out/2026), não testada no CAD:**
+- DLL única (Core, YamlDotNet e catálogo embutidos).
+- Painel `C3DHYDRO` no molde do Viário (`Ui/Panel`), com as nove categorias da proposta B §6.1.
+  Funcionam Dispositivos, Catálogo e Configuração; as outras mostram "em breve".
+- Log comum (`HydroLog`, Ctrl+Shift+L), progresso (`Progress` + `ProgressWindow`), Ribbon HYDRO
+  com um botão por categoria, e `DM_IR` (seleciona por handle).
+- Core: `Affine` e `PlanOutline` (planta esquemática da árvore CSG para o monitor).
+
+**Padrão de interface:** o painel do Viário (github.com/heyttor-camelo/Civil3D2026Plugin,
+`docs/DEVELOPMENT.md` §8). Esc nunca fecha janela; ícones vetoriais 32×32 com cores de significado;
+"elevação" para altura de ponto em textos de interface ("cota" é dimensão).
+
 **Próximos passos (em ordem sugerida):**
 1. Testar a Fase 2 no Civil 3D com o roteiro do README e corrigir o que aparecer.
-2. Opcional: DLL única (Core e YamlDotNet embutidos), para evitar o erro de DLL faltando.
+2. ~~DLL única~~ (feito na F0).
 3. Prévia da geometria durante o arrasto do grip (DrawJig ou transient graphics).
 4. Acompanhamento automático da superfície (guardar o handle da superfície e o hash).
 5. Categoria `linear` (sarjeta, valeta): seção varrida ao longo de alinhamento e perfil.

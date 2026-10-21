@@ -15,6 +15,7 @@ using Modeler.Civil3D.Devices;
 using Modeler.Civil3D.Geometry;
 using Modeler.Civil3D.Persistence;
 using Modeler.Civil3D.Ui;
+using Modeler.Civil3D.Ui.Panel;
 using Modeler.Core.Definition;
 using Modeler.Core.Editing;
 using Modeler.Core.Errors;
@@ -44,6 +45,8 @@ public sealed class Commands
         ("DM_INFO", "mostra parâmetros, variáveis, quantitativos e conectores de um dispositivo"),
         ("DM_CATALOGO", "mostra/troca a pasta do catálogo e lista as definições"),
         ("DM_AUTO", "liga/desliga a atualização automática quando tubos ligados mudam"),
+        ("DM_IR", "seleciona e enquadra um dispositivo pelo handle (usado pelo painel)"),
+        ("C3DHYDRO", "abre o painel HYDRO (C3DHYDRO <categoria> abre direto nela)"),
     };
 
     [CommandMethod("DeviceModeler", "DM_AUTO", CommandFlags.Modal)]
@@ -113,6 +116,7 @@ public sealed class Commands
         }
 
         Ed.WriteMessage($"\n{form.InstanceName} ({definition.Id}) inserido.");
+        HydroPanel.Reveal("DISPOSITIVOS", referenceId.Handle.ToString());
         if (definition.Parameters.Any(p => p.Target == TargetKind.Superficie))
         {
             var surfaceId = PickSurface(optional: true);
@@ -144,6 +148,7 @@ public sealed class Commands
         record.Name = form.InstanceName;
         Report(record.Name, DeviceService.Regenerate(tr, reference, definition, record, form.Values));
         tr.Commit();
+        HydroPanel.Reveal("DISPOSITIVOS", id.Handle.ToString());
     });
 
     /// <summary>Disparado pelo clique num grip de parâmetro (ver <see cref="DeviceGripOverrule"/>).</summary>
@@ -400,6 +405,7 @@ public sealed class Commands
 
         Ed.WriteMessage(sb.ToString());
         tr.Commit();
+        HydroPanel.Reveal("DISPOSITIVOS", id.Handle.ToString());
     });
 
     [CommandMethod("DeviceModeler", "DM_CATALOGO", CommandFlags.Modal)]
@@ -431,6 +437,8 @@ public sealed class Commands
         {
             Ed.WriteMessage($"\n  ERRO: {e}");
         }
+
+        HydroPanel.Reveal("CATALOGO");
     });
 
     // ------------------------------------------------------------------ apoio
@@ -443,6 +451,7 @@ public sealed class Commands
         }
         catch (Exception ex) when (ex is ModelerException or InvalidOperationException or AcException or IOException or ArgumentException)
         {
+            Infra.HydroLog.Warn("Comandos", ex.Message);
             Ed.WriteMessage($"\nDeviceModeler: {ex.Message}");
         }
     }

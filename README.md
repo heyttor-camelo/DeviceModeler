@@ -329,9 +329,12 @@ instalado, usa a cópia em `refs\acad2026\` (ignorada pelo git). Também dá par
 dotnet build DeviceModeler.sln
 ```
 
-A saída fica em `NETLOAD\`: `Modeler.Civil3D.dll`, `Modeler.Core.dll`, `YamlDotNet.dll` e
-`catalog\`. No Civil 3D, rode `NETLOAD` em `NETLOAD\Modeler.Civil3D.dll`. Para carregar
-automaticamente ao abrir o Civil 3D, instale o bundle com o Civil 3D fechado:
+A saída fica em `NETLOAD\`: **uma DLL só**, `Modeler.Civil3D.dll`, mais a pasta `catalog\`.
+O `Modeler.Core.dll` e o `YamlDotNet.dll` vão embutidos nela como recurso (`EmbeddedAssemblies`
+os carrega no `ModuleInitializer`), e o catálogo também: se só a DLL for copiada, as definições
+são extraídas para `%APPDATA%\DeviceModeler\catalog`. No Civil 3D, rode `NETLOAD` em
+`NETLOAD\Modeler.Civil3D.dll`. Para carregar automaticamente ao abrir o Civil 3D, instale o bundle
+com o Civil 3D fechado:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File tools/Install-Bundle.ps1
@@ -366,6 +369,36 @@ para a série R25.1 (Civil 3D 2026).
 | `DM_SWMM` | Grava `[JUNCTIONS]` e `[COORDINATES]` de todos os dispositivos num `.inp` |
 | `DM_INFO` | Mostra parâmetros, variáveis, quantitativos, conectores (em coordenadas do desenho) e o nó SWMM |
 | `DM_CATALOGO` | Mostra ou troca a pasta do catálogo (gravada em `%APPDATA%\DeviceModeler\settings.json`) e lista as definições e os erros |
+| `C3DHYDRO` | Abre o painel HYDRO. `C3DHYDRO Dispositivos` (ou `Redes`, `Catalogo`, `Configuracao`...) abre direto na categoria; Enter abre na última usada |
+| `DM_IR` | Seleciona e enquadra um dispositivo pelo handle; o painel usa antes de `DM_EDITAR`, `DM_INFO` etc. |
+
+Os comandos que terminam com um dispositivo ou com o catálogo (`DM_INSERIR`, `DM_EDITAR`,
+`DM_INFO`, `DM_CATALOGO`) levam o painel, se estiver aberto, até esse item.
+
+### Painel HYDRO (`C3DHYDRO`)
+
+Uma janela WPF não modal e de instância única, no molde do painel do Viário (Civil3D2026Plugin,
+`docs/DEVELOPMENT.md` §8). De cima para baixo:
+
+1. **Categorias** com contagem e aviso: Redes, Dispositivos, Bacias, Setores, Verificação, Saídas,
+   Simulação, Catálogo e Configuração. As que ainda não têm conteúdo aparecem esmaecidas e mostram
+   "em breve".
+2. **Barra de comandos** só com ícones vetoriais 32×32 (desenhados em código, `HydroIcons`), com
+   tooltip rico (título, desenho grande, descrição, passos e o nome do comando) e menus suspensos.
+   À direita, "Localizar:" filtra a lista.
+3. **Monitor** escuro: planta dos dispositivos do desenho (contorno de cada peça, furos tracejados,
+   conectores em magenta e direção dos tubos em ciano) ou a planta do item do catálogo nos valores
+   padrão. Roda = zoom, arrastar = pan, duplo clique = enquadrar.
+4. **GridSplitter**, **lista** com marcação (espaço marca a seleção), coluna de aviso e menu no
+   botão direito; duplo clique faz a primeira ação do menu (ir até o dispositivo).
+5. **Abas do item**: Propriedades (com ações), Variáveis, Quantitativos, Conectores e Avisos.
+6. **Barra de status**, Preferências (tema claro ou escuro) e Log.
+
+O painel só manda comandos (`SendStringToExecute`); quem pede clique no desenho continua na linha de
+comando. **Esc nunca fecha a janela.** O log comum fica em `%LOCALAPPDATA%\DeviceModeler\logs`
+(Ctrl+Shift+L em qualquer janela do HYDRO) e as operações longas usam a janela de progresso comum.
+A Ribbon ganha a aba **HYDRO**, com um botão grande por categoria (`C3DHYDRO <categoria>`) e os
+atalhos Inserir, Editar e Conectar.
 
 ### Como fica no DWG
 
@@ -411,6 +444,13 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
 7. `COPY` o PV e edite a cópia com `DM_EDITAR`: o original não muda.
 8. `DM_QUANTITATIVOS` (salve o CSV), `DM_SWMM` (abra o `.inp` no SWMM 5) e `DM_INFO`.
 9. `UNDO` depois de cada passo: tudo volta.
+10. **DLL única:** num Civil 3D limpo, `NETLOAD` só em `Modeler.Civil3D.dll` (sem as outras DLLs ao
+    lado) e `DM_CATALOGO`: deve listar o catálogo, extraído para `%APPDATA%\DeviceModeler\catalog`.
+11. **Painel:** `C3DHYDRO`. Confira as nove categorias (as sem conteúdo dizem "em breve"), os
+    tooltips da barra de comandos, a planta dos dispositivos no monitor (zoom, pan, duplo clique),
+    a lista (marcação com espaço, botão direito, duplo clique leva ao dispositivo) e as abas. Troque
+    o tema em Preferências e confira que **Esc não fecha** o painel. Ctrl+Shift+L abre o log.
+12. **Ribbon:** a aba HYDRO tem um botão por categoria; cada um abre o painel na categoria.
 
 ### Limitações atuais e próximos passos
 
