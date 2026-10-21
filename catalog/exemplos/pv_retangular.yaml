@@ -47,6 +47,7 @@ parametros:
     rotulo: Elevação de fundo (interna)
     grupo: Elevações
     alvo: tubo
+    grip: { tipo: perfil, posicao: "[0, 0, CotaFundo]" }
   CotaTampa:
     tipo: cota
     padrao: 101.50

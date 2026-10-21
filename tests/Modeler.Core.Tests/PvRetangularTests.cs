@@ -185,7 +185,10 @@ public class PvRetangularTests
         Assert.Equal(new Vec3(0.75, 0, 101.5), gripL.Position);
         Assert.Equal(Vec3.UnitX, gripL.Direction);
         Assert.Equal(2, gripL.Factor);
-        Assert.Equal(3, inst.Grips.Count);
+        Assert.Equal(4, inst.Grips.Count);
+        var fundo = inst.Grips.Single(g => g.Parameter == "CotaFundo");
+        Assert.Equal(Modeler.Core.Definition.GripKind.Perfil, fundo.Kind);
+        Assert.Equal(new Vec3(0, 0, 100), fundo.Position);
     }
 
     [Fact]
