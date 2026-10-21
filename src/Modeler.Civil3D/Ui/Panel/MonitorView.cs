@@ -85,6 +85,7 @@ internal sealed class MonitorView
     {
         _items.Clear();
         Message = null;
+        Units = "m";
     }
 
     public void ResetView()

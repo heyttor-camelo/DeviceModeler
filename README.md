@@ -481,6 +481,27 @@ para a série R25.1 (Civil 3D 2026).
 | `DM_PONTAS` | Modo de recálculo das pontas soltas dos tubos ligados (sem estrutura): conector Fixo, Ajustar (o mais próximo), Melhor3d ou Melhor2d (o que deixa o tubo mais curto) × elevação Corrigir (a do conector) ou Manter. Grava no dispositivo e aplica já; depois, mover o dispositivo leva as pontas |
 | `DM_ESTRUTURA` | Cria a estrutura nula da Pipe Network de cada dispositivo e liga a ela as pontas soltas dos tubos conectados: mover o dispositivo passa a mover a estrutura e os tubos |
 
+| `DM_PROJETAR` | Projeta dispositivos numa vista de perfil: o sólido é **cortado** pelo plano vertical do alinhamento na estaca do dispositivo (tangente local) e o resultado vai para a vista com `FindXYAtStationAndElevation` (exagero e datum). Pede o estilo de projeção, o lado (Ambos/Esquerdo/Direito) e a distância máxima ao alinhamento |
+| `DM_ROTULO` | Rótulo (MLeader) com um modelo de macros (padrão: a dica da definição); acompanha o dispositivo |
+| `DM_TABELA` | Tabela nativa (Padrão: Nº, nome, dispositivo, código, X, Y, elevações e altura; Quantitativos: os quantitativos das definições); com Enter na seleção, pega todos os dispositivos, inclusive os que vierem depois |
+| `DM_ESTILO` | Estilo de dispositivo: Aplicar aos dispositivos, Criar a partir de um dispositivo (uma linha por sólido) ou Atualizar (refazer depois de editar o estilo no painel) |
+| `DM_SAIDAS` | Refaz todos os rótulos, tabelas e projeções |
+
+**Estilos e saídas.** O **estilo de dispositivo** é uma tabela de componentes casada pelo nome dos
+sólidos (`expor_solido("concreto", ...)` → componente "concreto"), com camada, visibilidade (o
+invisível nem entra no bloco), cor, material e tipo de linha; "*" vale para os sólidos sem linha. O
+**estilo de projeção** tem os componentes corte (arestas da face cortada), hachura (padrão, escala e
+ângulo), contorno (silhueta), ocultas (arestas fora do plano, tracejadas) e eixo, mais o lado e a
+distância máxima padrão. Os estilos ficam no desenho (`HYDRO_ESTILOS`, `HYDRO_ESTILOS_PROJECAO`) e
+se editam no painel (Saídas → estilo → Componentes). Rótulos, tabelas e projeções guardam o vínculo
+(`HYDRO_SAIDA`) e se refazem no fim do comando quando o dispositivo, a vista de perfil ou o
+alinhamento mudam; os de um dispositivo apagado saem junto. Nas projeções, os grips `tipo: perfil`
+(e os de esticar em Z) aparecem como losango e arrastam a elevação na vista, com prévia.
+
+Campos dos modelos de rótulo e tabela: parâmetros, variáveis, quantitativos, `codigo`, `nome`,
+`numero`, `rede`, `x`, `y`, `rotacao`, `elev_tampa`, `elev_fundo` e `altura`
+(ex.: `"{nome}\nCT {elev_tampa:m:3}\nCF {elev_fundo:m:3}"`).
+
 **Rede.** Uma rede é o conjunto de dispositivos ligados por tubos (um tubo que aparece nas conexões
 de dois dispositivos é um trecho entre eles; o sentido vem das elevações de fundo). Os tubos são da
 Pipe Network do Civil 3D; cada dispositivo pode ter uma estrutura nula no mesmo ponto, sincronizada
@@ -616,6 +637,19 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
     se refazem. Num PV com tubo solto (sem estrutura), `DM_PONTAS Ajustar Corrigir` e mova o PV.
 20. **Painel Redes:** a rede aparece com dispositivos, trechos, extensão e as setas do fluxo no monitor;
     as abas Dispositivos e Trechos listam ordem, elevações e declividades.
+21. **Projeção em perfil:** crie alinhamento, perfil e ProfileView passando pelos PVs. `DM_PROJETAR`
+    (Enter = todos) → a vista → Padrão → Ambos → Enter. Cada PV aparece cortado: arestas da face
+    cortada, hachura ANSI31, silhueta e eixo, nas camadas DM-PERFIL-*. Edite um PV (H maior): a
+    projeção se refaz. Selecione a projeção: o losango do fundo arrasta a elevação de fundo com
+    prévia; ao soltar, o PV e a projeção se refazem. Mova um PV para 15 m do eixo: com distância
+    máxima 10 m ele some (a lista de Saídas diz por quê).
+22. **Estilo de projeção:** no painel, Saídas → estilo Padrão → mude a hachura para AR-CONC, escala
+    0,05, ligue "ocultas" → Salvar → Atualizar saídas.
+23. **Rótulo e tabela:** `DM_ROTULO` num PV com o modelo padrão; edite o PV: o texto muda; mova o
+    PV: o rótulo vai junto. `DM_TABELA` (Enter = todos, Padrao): insira um PV novo e veja a tabela
+    ganhar a linha no fim do comando.
+24. **Estilo de dispositivo:** `DM_ESTILO Criar` a partir de um PV ("PV prancha"); no painel, deixe
+    "degraus" invisível e a camada do concreto C-PV → Salvar e refazer; `DM_ESTILO Aplicar`.
 
 ### Limitações atuais e próximos passos
 

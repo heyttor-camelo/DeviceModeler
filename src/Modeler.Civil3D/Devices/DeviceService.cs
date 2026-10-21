@@ -10,6 +10,7 @@ using Modeler.Civil3D.Geometry;
 using Modeler.Civil3D.Infra;
 using Modeler.Civil3D.Persistence;
 using Modeler.Core.Definition;
+using Modeler.Core.Drawing;
 using Modeler.Core.Editing;
 using Modeler.Core.Results;
 using CorePlacement = Modeler.Core.Geometry.Placement;
@@ -26,13 +27,13 @@ internal static class DeviceService
         new(Solid3dBuilder.ToVec3(reference.Position), reference.Rotation * 180 / Math.PI);
 
     /// <summary>Cria um bloco anônimo com os sólidos da instância e devolve o id do bloco.</summary>
-    public static ObjectId CreateBlock(Transaction tr, Database db, DeviceInstance instance)
+    public static ObjectId CreateBlock(Transaction tr, Database db, DeviceInstance instance, DeviceStyle? style = null)
     {
         var table = (BlockTable)tr.GetObject(db.BlockTableId, OpenMode.ForWrite);
         var block = new BlockTableRecord { Name = "*U", Origin = Point3d.Origin };
         var id = table.Add(block);
         tr.AddNewlyCreatedDBObject(block, true);
-        FillBlock(tr, db, block, instance);
+        FillBlock(tr, db, block, instance, style);
         return id;
     }
 
@@ -55,7 +56,7 @@ internal static class DeviceService
     /// fica como está e só o registro é regravado.</summary>
     /// <returns>Mensagens sobre ajustes feitos (valores descartados, avisos da definição).</returns>
     public static List<string> Regenerate(Transaction tr, BlockReference reference, DeviceDefinition definition, DeviceRecord record,
-        IReadOnlyDictionary<string, object>? newValues = null)
+        IReadOnlyDictionary<string, object>? newValues = null, bool forceRebuild = false)
     {
         var messages = new List<string>();
         var before = DeviceEditing.Reconcile(definition, record.Values, out _);
@@ -93,11 +94,12 @@ internal static class DeviceService
         var db = reference.Database;
         var block = (BlockTableRecord)tr.GetObject(reference.BlockTableRecord, OpenMode.ForRead);
         var shared = block.GetBlockReferenceIds(true, false).Count > 1;
-        var rebuild = shared || shifted || record.DefinitionHash != definition.Hash || definition.ChangesGeometry(before, instance.Parameters);
+        var style = Drawing.StyleStore.Device(tr, db, record.Style);
+        var rebuild = forceRebuild || shared || shifted || record.DefinitionHash != definition.Hash || definition.ChangesGeometry(before, instance.Parameters);
         if (shared)
         {
             // cópia (COPY/ARRAY) compartilhando o bloco anônimo: separa antes de editar
-            reference.BlockTableRecord = CreateBlock(tr, db, instance);
+            reference.BlockTableRecord = CreateBlock(tr, db, instance, style);
         }
         else if (rebuild)
         {
@@ -107,7 +109,7 @@ internal static class DeviceService
                 tr.GetObject(id, OpenMode.ForWrite).Erase();
             }
 
-            FillBlock(tr, db, block, instance);
+            FillBlock(tr, db, block, instance, style);
         }
 
         record.DefinitionId = definition.Id;
@@ -134,7 +136,7 @@ internal static class DeviceService
         if (block.GetBlockReferenceIds(true, false).Count > 1)
         {
             var values = DeviceEditing.Reconcile(definition, record.Values, out _);
-            reference.BlockTableRecord = CreateBlock(tr, reference.Database, definition.Evaluate(values));
+            reference.BlockTableRecord = CreateBlock(tr, reference.Database, definition.Evaluate(values), Drawing.StyleStore.Device(tr, reference.Database, record.Style));
         }
 
         record.Write(reference, tr);
@@ -220,10 +222,19 @@ internal static class DeviceService
         }
     }
 
-    private static void FillBlock(Transaction tr, Database db, BlockTableRecord block, DeviceInstance instance)
+    /// <summary>Um <c>Solid3d</c> por sólido de saída, com o componente do estilo casado pelo nome
+    /// (estudo C §3.1): invisível não entra no bloco; camada, cor, material e transparência do
+    /// componente, ou o padrão (camada DM-&lt;NOME&gt;, cor pelo material).</summary>
+    private static void FillBlock(Transaction tr, Database db, BlockTableRecord block, DeviceInstance instance, DeviceStyle? style)
     {
         foreach (var output in instance.Solids)
         {
+            var component = style?.Resolve(output.Name);
+            if (component is { Visible: false })
+            {
+                continue;
+            }
+
             var solid = Solid3dBuilder.Build(output.Node);
             if (solid is null)
             {
@@ -231,9 +242,14 @@ internal static class DeviceService
             }
 
             solid.SetDatabaseDefaults(db);
-            solid.LayerId = EnsureLayer(tr, db, LayerName(output.Name), ColorFor(output));
-            solid.ColorIndex = 256; // ByLayer
-            var material = FindMaterial(tr, db, output.Material);
+            solid.LayerId = EnsureLayer(tr, db, component?.Layer ?? LayerName(output.Name), component?.Color ?? ColorFor(output));
+            solid.ColorIndex = component?.Color is { } color ? color : (short)256; // ByLayer
+            if (component?.Transparency is { } transparency)
+            {
+                solid.Transparency = new Transparency((byte)Math.Clamp(255 - (transparency * 255 / 100), 0, 255));
+            }
+
+            var material = FindMaterial(tr, db, component?.Material ?? output.Material);
             if (!material.IsNull)
             {
                 solid.MaterialId = material;

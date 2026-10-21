@@ -24,6 +24,8 @@ public sealed class Plugin : IExtensionApplication
         DeviceObjectOverrule.Register();
         ConnectorSnap.Register();
         DeviceInteraction.Start();
+        Drawing.OutputsUpdater.Start();
+        Drawing.ProjectionGripOverrule.Register();
         HydroRibbon.Initialize();
         foreach (Document document in AcApp.DocumentManager)
         {
@@ -47,6 +49,7 @@ public sealed class Plugin : IExtensionApplication
         DeviceGripOverrule.Unregister();
         DeviceObjectOverrule.Unregister();
         DeviceInteraction.Stop();
+        Drawing.ProjectionGripOverrule.Unregister();
         HydroRibbon.Terminate();
         HydroLog.Stop();
     }

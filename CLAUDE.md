@@ -186,6 +186,17 @@ O que se aprendeu:
 - Painel: categoria Redes (planta com setas do fluxo, abas Dispositivos e Trechos); Dispositivos
   com Nº e Rede.
 
+**HYDRO F4 (desenho), implementada, não testada no CAD:**
+- Core `Drawing/`: `DeviceStyle`/`ProjectionStyle` (componentes, JSON) e `ProfileProjection`
+  (`AlignmentFrame`: estaca/offset/elevação, lado, distância máxima, silhueta).
+- Plugin `Drawing/`: `StyleStore` (NOD `HYDRO_ESTILOS*`), estilo aplicado no `FillBlock`,
+  `OutputRecord` (`HYDRO_SAIDA`) ligando rótulos (MLeader), tabelas nativas e projeções aos
+  dispositivos, `OutputsUpdater` (última fase da fila: dispositivos, vistas e alinhamentos
+  alterados), `Projections` (corte por `Solid3d.GetSection` no plano do alinhamento + mapeamento por
+  `FindXYAtStationAndElevation`), `ProjectionGripOverrule` (losango na vista de perfil).
+- Comandos `DM_PROJETAR`, `DM_ROTULO`, `DM_TABELA`, `DM_ESTILO`, `DM_SAIDAS`; categoria Saídas com
+  editor de estilos.
+
 **Padrão de interface:** o painel do Viário (github.com/heyttor-camelo/Civil3D2026Plugin,
 `docs/DEVELOPMENT.md` §8). Esc nunca fecha janela; ícones vetoriais 32×32 com cores de significado;
 "elevação" para altura de ponto em textos de interface ("cota" é dimensão).

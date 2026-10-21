@@ -77,6 +77,9 @@ internal sealed class DeviceRecord
     /// <summary>Modo de recálculo das pontas dos tubos ligados (<c>ajustar_corrigir</c>...); vazio = o padrão.</summary>
     public string EndMode { get; set; } = "";
 
+    /// <summary>Estilo de dispositivo (<c>HYDRO_ESTILOS</c>); vazio = "Padrão".</summary>
+    public string Style { get; set; } = "";
+
     public static bool IsDevice(DBObject obj, Transaction tr) => TryRead(obj, tr) is not null;
 
     /// <summary>Lê o registro; nulo se a entidade não for um dispositivo.</summary>
@@ -193,6 +196,7 @@ internal sealed class DeviceRecord
         ["rede"] = Network,
         ["estrutura"] = StructureHandle,
         ["modo_ponta"] = EndMode,
+        ["estilo"] = Style,
     }.ToJsonString();
 
     private void ReadMeta(string json)
@@ -213,6 +217,7 @@ internal sealed class DeviceRecord
             Network = node["rede"]?.GetValue<string>() ?? "";
             StructureHandle = node["estrutura"]?.GetValue<string>() ?? "";
             EndMode = node["modo_ponta"]?.GetValue<string>() ?? "";
+            Style = node["estilo"]?.GetValue<string>() ?? "";
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {

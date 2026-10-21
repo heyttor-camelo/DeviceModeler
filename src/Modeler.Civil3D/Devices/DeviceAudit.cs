@@ -75,13 +75,15 @@ internal static class DeviceAudit
 
             try
             {
-                var values = DeviceEditing.Reconcile(definition, record.Values, out var problems);
+                DeviceEditing.Reconcile(definition, record.Values, out var problems);
                 foreach (var problem in problems)
                 {
                     Add(AuditLevel.Aviso, "parâmetro", problem, "regenerar com a definição atual");
                 }
 
-                var instance = definition.Evaluate(values);
+                // a avaliação vem do cache (o painel audita a cada fim de comando)
+                var instance = InstanceCache.Get(tr, reference, out var evaluationError)?.Instance
+                               ?? throw new EvaluationException(evaluationError ?? "não avalia", null, null);
                 foreach (var warning in instance.Warnings)
                 {
                     Add(AuditLevel.Aviso, "validação", warning);

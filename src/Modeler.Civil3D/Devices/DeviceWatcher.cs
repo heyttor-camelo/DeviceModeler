@@ -44,7 +44,7 @@ internal static class DeviceWatcher
 
     /// <summary>Chamado depois que dispositivos foram refeitos ou apagados (rótulos e projeções se
     /// atualizam por aqui).</summary>
-    public static event Action<Transaction, Database, IReadOnlyCollection<string>, IReadOnlyCollection<string>>? DevicesChanged;
+    public static event Action<Transaction, Database, OutputChanges>? DevicesChanged;
 
     public static void Start()
     {
@@ -139,6 +139,15 @@ internal static class DeviceWatcher
             case CivilSurface surface:
                 For(db).Surfaces.Add(surface.Handle.ToString());
                 break;
+            case ProfileView view:
+                For(db).Views.Add(view.Handle.ToString());
+                break;
+            case Alignment alignment:
+                For(db).Alignments.Add(alignment.Handle.ToString());
+                break;
+            case Profile profile when !profile.AlignmentId.IsNull:
+                For(db).Alignments.Add(profile.AlignmentId.Handle.ToString());
+                break;
             case BlockReference reference when !reference.ExtensionDictionary.IsNull:
                 // pode ser dispositivo: confere no fim do comando (aqui só enfileira)
                 For(db).Devices.Add(reference.ObjectId);
@@ -183,7 +192,7 @@ internal static class DeviceWatcher
             using var tr = document.Database.TransactionManager.StartTransaction();
             var changed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             Process(tr, document, pending, changed);
-            DevicesChanged?.Invoke(tr, document.Database, changed, pending.ErasedDevices);
+            DevicesChanged?.Invoke(tr, document.Database, new OutputChanges(changed, pending.ErasedDevices, pending.Views, pending.Alignments));
             tr.Commit();
         }
         catch (Exception ex)
@@ -272,6 +281,8 @@ internal static class DeviceWatcher
                     return;
                 }
 
+                // rótulos, tabelas e projeções dele se refazem (a posição ou os parâmetros podem ter mudado)
+                changed.Add(reference.Handle.ToString());
                 NetworkSync.SyncStructure(tr, db, reference, entry);
                 var messages = new List<string>();
                 if (!Enabled || !NetworkSync.AdjustEnds(tr, db, reference, entry, messages))
@@ -383,6 +394,19 @@ internal static class DeviceWatcher
         /// <summary>Referências de bloco alteradas (MOVE, ROTATE, edição): estrutura e pontas acompanham.</summary>
         public HashSet<ObjectId> Devices { get; } = new();
 
-        public bool IsEmpty => Grips.Count == 0 && Clones.Count == 0 && Pipes.Count == 0 && ErasedPipes.Count == 0 && Surfaces.Count == 0 && ErasedDevices.Count == 0 && Devices.Count == 0;
+        /// <summary>Vistas de perfil e alinhamentos (ou perfis) alterados: as projeções se refazem.</summary>
+        public HashSet<string> Views { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public HashSet<string> Alignments { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public bool IsEmpty => Grips.Count == 0 && Clones.Count == 0 && Pipes.Count == 0 && ErasedPipes.Count == 0 && Surfaces.Count == 0 && ErasedDevices.Count == 0 && Devices.Count == 0 && Views.Count == 0 && Alignments.Count == 0;
     }
 }
+
+/// <summary>O que mudou no fim do comando, para as saídas (rótulos, tabelas, projeções): dispositivos
+/// refeitos, dispositivos apagados, vistas de perfil e alinhamentos alterados (handles).</summary>
+internal sealed record OutputChanges(
+    IReadOnlyCollection<string> Changed,
+    IReadOnlyCollection<string> Erased,
+    IReadOnlyCollection<string> Views,
+    IReadOnlyCollection<string> Alignments);
