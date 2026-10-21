@@ -139,6 +139,10 @@ internal static class DeviceWatcher
             case CivilSurface surface:
                 For(db).Surfaces.Add(surface.Handle.ToString());
                 break;
+            case BlockReference reference when !reference.ExtensionDictionary.IsNull:
+                // pode ser dispositivo: confere no fim do comando (aqui só enfileira)
+                For(db).Devices.Add(reference.ObjectId);
+                break;
         }
     }
 
@@ -251,6 +255,40 @@ internal static class DeviceWatcher
             }
         }
 
+        // 2b. dispositivos alterados (MOVE, ROTATE, edição): a estrutura nula acompanha e as pontas
+        // soltas dos tubos vão para o conector; depois os furos se refazem pelos tubos
+        foreach (var id in pending.Devices.Where(i => !i.IsErased && !pending.Grips.ContainsKey(i)))
+        {
+            if (tr.GetObject(id, OpenMode.ForRead) is not BlockReference reference || !DeviceRecord.IsDevice(reference, tr))
+            {
+                continue;
+            }
+
+            Guard(editor, reference, () =>
+            {
+                var entry = InstanceCache.Get(tr, reference);
+                if (entry is null)
+                {
+                    return;
+                }
+
+                NetworkSync.SyncStructure(tr, db, reference, entry);
+                var messages = new List<string>();
+                if (!Enabled || !NetworkSync.AdjustEnds(tr, db, reference, entry, messages))
+                {
+                    return;
+                }
+
+                var values = new Dictionary<string, object>(entry.Instance.Parameters, StringComparer.Ordinal);
+                var conexoes = entry.Definition.Parameters.First(p => p.Type == ParameterType.Conexoes);
+                var connections = CivilLinks.RefreshConnections(tr, db, (IReadOnlyList<object>)values[conexoes.Name], DeviceService.PlacementOf(reference), messages);
+                CivilLinks.ApplyConnections(entry.Definition, values, connections, messages);
+                messages.AddRange(DeviceService.Regenerate(tr, reference, entry.Definition, entry.Record, values));
+                Say(entry.Record.Name, messages);
+                changed.Add(reference.Handle.ToString());
+            });
+        }
+
         if (pending.ErasedPipes.Count == 0 && pending.Pipes.Count == 0 && pending.Surfaces.Count == 0)
         {
             return;
@@ -342,6 +380,9 @@ internal static class DeviceWatcher
 
         public HashSet<string> ErasedDevices { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-        public bool IsEmpty => Grips.Count == 0 && Clones.Count == 0 && Pipes.Count == 0 && ErasedPipes.Count == 0 && Surfaces.Count == 0 && ErasedDevices.Count == 0;
+        /// <summary>Referências de bloco alteradas (MOVE, ROTATE, edição): estrutura e pontas acompanham.</summary>
+        public HashSet<ObjectId> Devices { get; } = new();
+
+        public bool IsEmpty => Grips.Count == 0 && Clones.Count == 0 && Pipes.Count == 0 && ErasedPipes.Count == 0 && Surfaces.Count == 0 && ErasedDevices.Count == 0 && Devices.Count == 0;
     }
 }

@@ -12,8 +12,7 @@ internal static class Categories
         var devices = new DevicesCategory();
         return new List<IPanelCategory>
         {
-            new ComingSoonCategory("REDES", "REDES", "Redes", "Redes",
-                "Redes do desenho (tipo, dispositivos, extensão e situação) e a planta esquemática de todas."),
+            new NetworksCategory(),
             devices,
             new ComingSoonCategory("BACIAS", "BACIAS", "Bacias", "Bacias",
                 "Bacias de contribuição: área, C, tempo de concentração e dispositivo de destino."),

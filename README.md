@@ -476,6 +476,17 @@ para a série R25.1 (Civil 3D 2026).
 | `DM_SUPERFICIE` | Parâmetros com `alvo: superficie` passam a valer a elevação da superfície no ponto de inserção. Com "Acompanhar" (padrão), a elevação é refeita quando a superfície mudar |
 | `DM_AUDITAR` | Lista os problemas dos dispositivos (esquema antigo, YAML ausente ou alterado, bloco compartilhado, nome ou id repetido, conexão para tubo apagado, superfície apagada) e oferece as correções automáticas. A categoria Verificação do painel mostra a mesma lista |
 | `DM_OSNAP` | Liga ou desliga o osnap de conector |
+| `DM_REDE` | Lançamento em cadeia: escolhe o dispositivo e os parâmetros uma vez (mesma janela do `DM_INSERIR`), o nome da rede de tubos, o diâmetro e a declividade, e a superfície (opcional). Cada clique insere um dispositivo (girado na direção do trecho) com uma estrutura nula da Pipe Network e o tubo nativo desde o anterior, já com furo e conector dos dois lados; a elevação de fundo desce pela declividade e a da tampa vem da superfície. O jig mostra o aramado do dispositivo e o trecho. Desfazer volta um trecho; no fim, oferece a numeração |
+| `DM_NUMERAR` | Numera pelo fluxo (Global: das cabeceiras mais distantes para a descarga, de modo que o fluxo vá sempre do menor para o maior número; Invertido: a descarga é 1) e renomeia pelo `modelos.nome` (e a estrutura nula junto) |
+| `DM_PONTAS` | Modo de recálculo das pontas soltas dos tubos ligados (sem estrutura): conector Fixo, Ajustar (o mais próximo), Melhor3d ou Melhor2d (o que deixa o tubo mais curto) × elevação Corrigir (a do conector) ou Manter. Grava no dispositivo e aplica já; depois, mover o dispositivo leva as pontas |
+| `DM_ESTRUTURA` | Cria a estrutura nula da Pipe Network de cada dispositivo e liga a ela as pontas soltas dos tubos conectados: mover o dispositivo passa a mover a estrutura e os tubos |
+
+**Rede.** Uma rede é o conjunto de dispositivos ligados por tubos (um tubo que aparece nas conexões
+de dois dispositivos é um trecho entre eles; o sentido vem das elevações de fundo). Os tubos são da
+Pipe Network do Civil 3D; cada dispositivo pode ter uma estrutura nula no mesmo ponto, sincronizada
+com ele (posição, rotação e elevações de tampa e fundo). Conectores têm filtro (lista de tipos:
+`tubo`, `valeta`...) e direção: uma ponta só vai para um conector que aceita o tipo e de cujo lado o
+tubo sai.
 | `DM_ATUALIZAR` | Relê os tubos (pelo handle) e o catálogo e regenera; avisa quando a definição mudou (hash) |
 | `DM_AUTO` | Liga ou desliga a atualização automática: se um tubo ligado mudar, o dispositivo se refaz ao fim do comando |
 | `DM_QUANTITATIVOS` | Totais por quantitativo na linha de comando, mais CSV detalhado (`;`) |
@@ -597,6 +608,14 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
     em rampa do topo das alas (`cortar`). Troque Tipo para Triplo e veja os três furos e conectores.
 17. **Auditoria:** `DM_AUDITAR` num desenho com dispositivos da versão anterior: acusa esquema 1 e
     migra com Corrigir.
+18. **Rede em cadeia:** `DM_REDE` → PV retangular → rede "Teste", Ø 0,40, 0,5 %, com superfície.
+    Clique 4 pontos: cada PV nasce com estrutura nula e o tubo desde o anterior, com furos dos dois
+    lados; a elevação de fundo desce 0,5 % por trecho. Desfazer remove o último trecho. Aceite numerar:
+    PV-1 a PV-4 no sentido do fluxo.
+19. **Seguir o PV:** MOVE de um PV da rede: a estrutura e as pontas dos tubos acompanham; os furos
+    se refazem. Num PV com tubo solto (sem estrutura), `DM_PONTAS Ajustar Corrigir` e mova o PV.
+20. **Painel Redes:** a rede aparece com dispositivos, trechos, extensão e as setas do fluxo no monitor;
+    as abas Dispositivos e Trechos listam ordem, elevações e declividades.
 
 ### Limitações atuais e próximos passos
 

@@ -22,7 +22,8 @@ namespace Modeler.Civil3D.Persistence;
 ///        (1)  caminho do YAML usado
 ///        (1)  nome da instância    ex.: PV-01
 ///        (300 ...) JSON dos parâmetros, em pedaços de até 250 caracteres
-///        (301 ...) esquema 2: JSON dos metadados (id da instância, superfície seguida, número, rede)
+///        (301 ...) esquema 2: JSON dos metadados (id da instância, superfície seguida, número, rede,
+///                  estrutura nula da Pipe Network, modo das pontas)
 /// </code>
 /// O esquema 1 (sem metadados) continua legível; ele vira 2 na próxima gravação (DM_AUDITAR migra
 /// tudo de uma vez). Sem o plugin o desenho continua válido: a geometria é um bloco anônimo comum.</summary>
@@ -69,6 +70,12 @@ internal sealed class DeviceRecord
 
     /// <summary>Nome da rede a que o dispositivo pertence (F3); vazio = nenhuma.</summary>
     public string Network { get; set; } = "";
+
+    /// <summary>Estrutura nula da Pipe Network sincronizada com o dispositivo (handle); vazio = nenhuma.</summary>
+    public string StructureHandle { get; set; } = "";
+
+    /// <summary>Modo de recálculo das pontas dos tubos ligados (<c>ajustar_corrigir</c>...); vazio = o padrão.</summary>
+    public string EndMode { get; set; } = "";
 
     public static bool IsDevice(DBObject obj, Transaction tr) => TryRead(obj, tr) is not null;
 
@@ -184,6 +191,8 @@ internal sealed class DeviceRecord
         ["seguir_superficie"] = FollowSurface,
         ["numero"] = Number,
         ["rede"] = Network,
+        ["estrutura"] = StructureHandle,
+        ["modo_ponta"] = EndMode,
     }.ToJsonString();
 
     private void ReadMeta(string json)
@@ -202,6 +211,8 @@ internal sealed class DeviceRecord
             FollowSurface = node["seguir_superficie"]?.GetValue<bool>() ?? false;
             Number = node["numero"]?.GetValue<int>() ?? 0;
             Network = node["rede"]?.GetValue<string>() ?? "";
+            StructureHandle = node["estrutura"]?.GetValue<string>() ?? "";
+            EndMode = node["modo_ponta"]?.GetValue<string>() ?? "";
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {

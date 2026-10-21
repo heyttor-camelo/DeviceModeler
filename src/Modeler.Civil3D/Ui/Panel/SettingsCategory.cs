@@ -44,6 +44,8 @@ internal sealed class SettingsCategory : IPanelCategory
         {
             new("catalogo", "PASTA", new[] { "Pasta do catálogo", DeviceCatalog.Folder }, "catalogo"),
             new("auto", "ATUALIZAR", new[] { "Atualização automática pelos tubos", DeviceWatcher.Enabled ? "ligada" : "desligada" }, "auto"),
+            new("pontas", "CONECTOR", new[] { "Modo das pontas dos tubos (padrão)", Civil.NetworkSync.DefaultMode }, "pontas"),
+            new("osnap", "CONECTOR", new[] { "Osnap de conector", ConnectorSnap.Active ? "ligado" : "desligado" }, "osnap"),
             new("tema", "PAINEL", new[] { "Tema do painel", host.Theme.IsDark ? "escuro" : "claro" }, "tema"),
             new("log", "LOG", new[] { "Pasta do log", HydroLog.Folder }, "log"),
             new("versao", "INFO", new[] { "Versão", HydroLog.Environment() }, "versao"),
@@ -66,6 +68,15 @@ internal sealed class SettingsCategory : IPanelCategory
                     ui.Section("Atualização automática").Note("Ligada: mover a ponta de um tubo ligado refaz o dispositivo ao fim do comando.")
                         .Action("Ligar", () => host.Send("DM_AUTO Ligar ", "Atualização automática ligada."))
                         .Action("Desligar", () => host.Send("DM_AUTO Desligar ", "Atualização automática desligada."));
+                    break;
+                case "pontas":
+                    ui.Section("Pontas dos tubos").Prop("Padrão", Civil.NetworkSync.DefaultMode)
+                        .Note("Troque pelo menu Pontas dos tubos, na categoria Redes, ou por dispositivo com DM_PONTAS.");
+                    break;
+                case "osnap":
+                    ui.Section("Osnap de conector")
+                        .Action("Ligar", () => host.Send("DM_OSNAP Ligar ", "Osnap de conector ligado."))
+                        .Action("Desligar", () => host.Send("DM_OSNAP Desligar ", "Osnap de conector desligado."));
                     break;
                 case "tema":
                     ui.Section("Tema").Note("Troque em Preferências..., no rodapé do painel.");

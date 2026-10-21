@@ -80,9 +80,9 @@ internal sealed class DevicesCategory : IPanelCategory
             new[] { "Escolha o arquivo." }, "DM_SWMM "),
     };
 
-    public string[] Columns => new[] { "Nome", "Código", "Dispositivo", "Versão", "X", "Y", "Rotação", "Conexões", "Situação" };
+    public string[] Columns => new[] { "Nome", "Nº", "Rede", "Código", "Dispositivo", "Versão", "X", "Y", "Rotação", "Conexões", "Situação" };
 
-    public double[] Widths => new double[] { 110, 110, 150, 60, 90, 90, 60, 70, 200 };
+    public double[] Widths => new double[] { 110, 40, 110, 110, 150, 60, 90, 90, 60, 70, 200 };
 
     public IReadOnlyList<PanelRow> Rows => _rows;
 
@@ -105,6 +105,8 @@ internal sealed class DevicesCategory : IPanelCategory
             _rows.Add(new PanelRow(item.Handle, "DISPOSITIVOS", new[]
             {
                 item.Name,
+                item.Record.Number > 0 ? item.Record.Number.ToString(CultureInfo.InvariantCulture) : "",
+                item.Record.Network,
                 item.Instance?.Code ?? "",
                 item.Definition?.Name ?? item.Record.DefinitionId,
                 item.Record.DefinitionVersion,
@@ -277,6 +279,11 @@ internal sealed class DevicesCategory : IPanelCategory
             .Prop("Definição", $"{item.Record.DefinitionId} {item.Record.DefinitionVersion}", warn: item.Stale)
             .Prop("Arquivo", item.Definition?.SourceFile ?? item.Record.SourceFile)
             .Prop("Handle", item.Handle)
+            .Prop("Rede", item.Record.Network.Length > 0 ? item.Record.Network : "(nenhuma)")
+            .Prop("Número", item.Record.Number > 0 ? item.Record.Number.ToString(CultureInfo.InvariantCulture) : "-")
+            .Prop("Estrutura nula", item.Record.StructureHandle.Length > 0 ? item.Record.StructureHandle : "(nenhuma)")
+            .Prop("Modo das pontas", item.Record.EndMode.Length > 0 ? item.Record.EndMode : "padrão")
+            .Prop("Superfície seguida", item.Record.FollowSurface ? item.Record.SurfaceHandle : "não")
             .Section("Posição")
             .Prop("X", N(item.Placement.Origin.X))
             .Prop("Y", N(item.Placement.Origin.Y))

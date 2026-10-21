@@ -174,6 +174,18 @@ O que se aprendeu:
 - Osnap de conector (`ConnectorSnap`, `DM_OSNAP`), dica no cursor (`modelos.dica`) e menu de
   contexto HYDRO (`DeviceInteraction`). `InstanceCache` compartilhado (painel, dica, osnap, grips).
 
+**HYDRO F3 (rede e lançamento), implementada, não testada no CAD:**
+- Core `Network/`: `ConnectorMatch` (filtro por lista de tipos, direção, modos Fixo/Ajustar/
+  Melhor3D/Melhor2D × Corrigir/Manter) e `FlowGraph` (sentido pelas elevações, componentes, ciclos,
+  numeração Global/Invertido).
+- `PipeNetworkLink`: rede, tamanhos de tubo da lista de peças, estrutura nula por dispositivo
+  (`StructureHandle` no registro), tubo nativo ligado às estruturas.
+- `NetworkSync` + fase "dispositivos alterados" do `DeviceWatcher`: a estrutura acompanha o
+  dispositivo; pontas soltas vão ao conector pelo modo (`EndMode` no registro ou o padrão).
+- Comandos `DM_REDE` (jig em cadeia, `ChainJig`), `DM_NUMERAR`, `DM_PONTAS`, `DM_ESTRUTURA`.
+- Painel: categoria Redes (planta com setas do fluxo, abas Dispositivos e Trechos); Dispositivos
+  com Nº e Rede.
+
 **Padrão de interface:** o painel do Viário (github.com/heyttor-camelo/Civil3D2026Plugin,
 `docs/DEVELOPMENT.md` §8). Esc nunca fecha janela; ícones vetoriais 32×32 com cores de significado;
 "elevação" para altura de ponto em textos de interface ("cota" é dimensão).
