@@ -15,12 +15,59 @@ namespace Modeler.Civil3D.Catalog;
 internal static class DeviceCatalog
 {
     private static readonly Dictionary<string, (DateTime Stamp, DeviceDefinition Definition)> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static string? _extracted;
 
     private static string SettingsFile =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeviceModeler", "settings.json");
 
-    public static string DefaultFolder =>
-        Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".", "catalog");
+    /// <summary>Pasta <c>catalog</c> ao lado da DLL; se ela não existir (só a DLL foi copiada), o
+    /// catálogo embutido é extraído para %APPDATA%\DeviceModeler\catalog.</summary>
+    public static string DefaultFolder
+    {
+        get
+        {
+            var beside = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".", "catalog");
+            return Directory.Exists(beside) ? beside : _extracted ??= ExtractEmbedded();
+        }
+    }
+
+    /// <summary>Copia os .yaml embutidos que ainda não existem (ou que mudaram) na pasta de usuário.
+    /// Roda uma vez por sessão. Arquivos que o usuário acrescentou ficam intocados;
+    /// para alterar um dispositivo do catálogo, salve uma cópia com outro nome.</summary>
+    private static string ExtractEmbedded()
+    {
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DeviceModeler", "catalog");
+        var assembly = Assembly.GetExecutingAssembly();
+        foreach (var resource in assembly.GetManifestResourceNames().Where(r => r.StartsWith("Catalog/", StringComparison.Ordinal)))
+        {
+            using var stream = assembly.GetManifestResourceStream(resource);
+            if (stream is null)
+            {
+                continue;
+            }
+
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            var bytes = memory.ToArray();
+            var path = Path.Combine(folder, resource["Catalog/".Length..].Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar));
+            try
+            {
+                if (File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes))
+                {
+                    continue;
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, bytes);
+            }
+            catch (IOException)
+            {
+                // arquivo aberto em outro programa: fica a versão que já está lá
+            }
+        }
+
+        return folder;
+    }
 
     public static string Folder
     {
