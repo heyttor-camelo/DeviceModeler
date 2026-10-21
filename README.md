@@ -451,7 +451,9 @@ com o Civil 3D fechado:
 powershell -ExecutionPolicy Bypass -File tools/Install-Bundle.ps1
 ```
 
-`-Remove` desinstala o bundle.
+`-Remove` desinstala o bundle. O script apaga antes o `DeviceModeler.bundle` (nome antigo do plugin),
+se existir, para os dois não carregarem juntos. Com o Civil 3D aberto (`acad.exe`), ele avisa e sai
+sem mexer em nada: feche o Civil 3D e rode de novo.
 
 **Sem compilar (outra máquina):** o repositório traz o bundle pronto em `dist/HYDRO.bundle`.
 Copie a pasta inteira para `%APPDATA%\Autodesk\ApplicationPlugins\` e abra o Civil 3D 2026. A DLL é
