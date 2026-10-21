@@ -96,9 +96,23 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
     Se só mudaram parâmetros fora de `GeometryParameters` (análise de impacto), o bloco fica.
 - **Grips:** `GripOverrule` em BlockReference com `SetExtensionDictionaryEntryFilter`, com o desenho
   dos grips do SOLIDOS (seta verde ACI 3, círculo ACI 4, losango ACI 4, contorno ACI 7, cores fixas).
-  Mudança de out/2026 (pedido do usuário: grips iguais aos do SOLIDOS, com prévia): o `HY_GRIP` saiu;
-  `MoveGripPointsAt` só calcula o valor e o aramado da prévia (Core, sem ACIS) e o `GripEnd` põe a
-  edição na fila. **Continua valendo: nunca refaça geometria dentro do overrule.**
+  Mudança de out/2026 (pedido do usuário: grips iguais aos do SOLIDOS, com prévia): o antigo `DM_GRIP`
+  (só valor digitado) saiu; `MoveGripPointsAt` só calcula o valor e o aramado da prévia (Core, sem
+  ACIS) e o `GripEnd` põe a edição na fila. **Continua valendo: nunca refaça geometria dentro do
+  overrule.**
+  - Segunda mudança de out/2026 (pedido do usuário: "quero os dois jeitos", arrastar com prévia **e**
+    digitar o valor com o grip quente). O estiramento nativo não serve para o valor digitado:
+    - a pergunta dele não pode ser trocada pelo texto pedido ("L = 1,20 m — arraste ou digite...");
+    - um número digitado vira distância direta a partir do grip (deslocamento, não valor final);
+    - "1,50" vira o ponto (1; 50).
+  - Por isso, no modo `Digitar` (padrão, `HY_GRIPMODO`), o grip é de disparo (`TriggerGrip` +
+    `OnHotGrip`, que devolve `GripHotToWarm`). Ele manda o `HY_GRIP`, que refaz o arrasto num
+    `DrawJig` sem ponto base, com a mesma `GripSession` (valor + prévia). Durante a pergunta, a vírgula
+    vira ponto (`DecimalCommaInput`, pelo `PreTranslateMessage`, que devolve a mensagem alterada ao
+    AutoCAD) e a entrada de ponteiro do `DYNMODE` fica desligada.
+  - O número digitado é o valor final do parâmetro (`DeviceEditing.TryParseGripInput`, limitado a
+    min/max). O modo `Nativo` mantém o caminho anterior intacto, como reserva se o `TriggerGrip` não
+    se comportar como esperado no CAD.
 - **Fila no fim do comando (`DeviceWatcher`, antes `PipeWatcher`):** `ObjectModified`,
   `ObjectErased`, o `DeepClone` e os grips só enfileiram; o processamento é no `CommandEnded`, com
   `LockDocument`, em fases (grips → cópias → tubos apagados → tubos → superfícies → dependentes),
@@ -180,6 +194,8 @@ O que se aprendeu:
 - Regeneração por impacto (`DeviceDefinition.GeometryParameters`/`ChangesGeometry`).
 - Grips iguais aos do SOLIDOS com prévia em aramado (`Wireframe` no Core); tipos `esticar`,
   `rotacionar` (parâmetro angulo, com `centro`) e `perfil` (só nas projeções, F4).
+- Valor digitado com o grip quente: `HY_GRIP` (`GripCommands`, `GripEditJig`, `GripSession`,
+  `DecimalCommaInput`) e `HY_GRIPMODO` (Digitar/Nativo, também na Configuração). Não testado no CAD.
 - `DeviceObjectOverrule` (DeepClone → bloco, id e nome novos no fim do comando; Erase → fila).
 - Superfície seguida por `ComputeFingerPrint()` (ulong) gravado no registro.
 - `DeviceRecord` esquema 2 (metadados JSON código 301: id GUID, superfície, número, rede) e

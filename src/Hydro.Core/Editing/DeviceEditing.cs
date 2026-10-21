@@ -1,9 +1,11 @@
+using System.Globalization;
 using Hydro.Core.Csg;
 using Hydro.Core.Definition;
 using Hydro.Core.Errors;
 using Hydro.Core.Expressions;
 using Hydro.Core.Flow;
 using Hydro.Core.Results;
+using Hydro.Core.Text;
 
 namespace Hydro.Core.Editing;
 
@@ -40,7 +42,13 @@ public static class DeviceEditing
                 break;
         }
 
-        var value = current + change;
+        return Constrain(parameter, current + change);
+    }
+
+    /// <summary>Leva um valor numérico para dentro do que o parâmetro aceita: min/max, valor permitido
+    /// mais próximo (havendo lista) e arredondamento dos inteiros.</summary>
+    public static double Constrain(ParameterDef parameter, double value)
+    {
         if (parameter.Min is { } min)
         {
             value = Math.Max(min, value);
@@ -51,12 +59,88 @@ public static class DeviceEditing
             value = Math.Min(max, value);
         }
 
-        if (parameter.AllowedValues is { Count: > 0 } allowed)
+        if (parameter.AllowedValues?.OfType<double>().ToList() is { Count: > 0 } allowed)
         {
-            value = allowed.OfType<double>().OrderBy(a => Math.Abs(a - value)).First();
+            value = allowed.OrderBy(a => Math.Abs(a - value)).First();
         }
 
         return parameter.Type == ParameterType.Inteiro ? Math.Round(value) : value;
+    }
+
+    /// <summary>Valor digitado com o grip quente (HY_GRIP). O número é o <b>valor final</b> do parâmetro,
+    /// não o deslocamento: num grip simétrico (<c>fator: 2</c>) digitar 1,50 deixa a dimensão em 1,50.
+    /// Aceita vírgula ou ponto decimal e a unidade do parâmetro no fim (<c>1,50 m</c>, <c>45°</c>).
+    /// Fora de min/max, o valor é limitado e <paramref name="message"/> diz o que mudou; texto que não é
+    /// número devolve falso, com o motivo em <paramref name="message"/>.</summary>
+    public static bool TryParseGripInput(ParameterDef parameter, string text, out double value, out string message)
+    {
+        value = 0;
+        message = "";
+        var body = StripUnit(parameter, text.Trim());
+        if (body.Contains(',') && body.Contains('.'))
+        {
+            message = $"'{text.Trim()}' não é um número (use só vírgula ou só ponto decimal)";
+            return false;
+        }
+
+        if (!double.TryParse(body.Replace(',', '.'), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite,
+                CultureInfo.InvariantCulture, out var typed) || !double.IsFinite(typed))
+        {
+            message = $"'{text.Trim()}' não é um número";
+            return false;
+        }
+
+        value = Constrain(parameter, typed);
+        if (!Values.NearlyEqual(value, typed))
+        {
+            var reason = parameter.Min is { } min && typed < min ? "mínimo" :
+                parameter.Max is { } max && typed > max ? "máximo" :
+                parameter.AllowedValues is { Count: > 0 } ? "valor permitido mais próximo" : "arredondado";
+            message = $"{parameter.Name}: {FormatGripValue(parameter, typed)} → {FormatGripValue(parameter, value)} ({reason})";
+        }
+
+        return true;
+    }
+
+    /// <summary>Valor no formato da linha de comando: pt-BR, 2 a 3 casas e o símbolo da unidade
+    /// (<c>1,20 m</c>, <c>45,0°</c>, <c>3</c>).</summary>
+    public static string FormatGripValue(ParameterDef parameter, double value)
+    {
+        var number = parameter.Type == ParameterType.Inteiro
+            ? value.ToString("0", Brazil)
+            : value.ToString(parameter.Type == ParameterType.Angulo ? "0.0#" : "0.00#", Brazil);
+        return number + (FormatSpec.Units.TryGetValue(parameter.Unit, out var unit) ? unit.Symbol : parameter.Unit.Length > 0 ? " " + parameter.Unit : "");
+    }
+
+    /// <summary>Linha de comando do grip quente: <c>L = 1,20 m — arraste ou digite o novo valor</c>.</summary>
+    public static string GripPrompt(ParameterDef parameter, double current) =>
+        $"{parameter.Name} = {FormatGripValue(parameter, current)} — arraste ou digite o novo valor";
+
+    private static readonly CultureInfo Brazil = CultureInfo.GetCultureInfo("pt-BR");
+
+    /// <summary>Tira do fim do texto a unidade do parâmetro (o nome canônico, <c>m2</c>, ou o símbolo, <c>m²</c>).</summary>
+    private static string StripUnit(ParameterDef parameter, string text)
+    {
+        var candidates = new List<string>();
+        if (parameter.Unit.Length > 0)
+        {
+            candidates.Add(parameter.Unit);
+        }
+
+        if (FormatSpec.Units.TryGetValue(parameter.Unit, out var unit))
+        {
+            candidates.Add(unit.Symbol.Trim());
+        }
+
+        foreach (var candidate in candidates.Distinct().OrderByDescending(c => c.Length))
+        {
+            if (text.EndsWith(candidate, StringComparison.OrdinalIgnoreCase))
+            {
+                return text[..^candidate.Length].TrimEnd();
+            }
+        }
+
+        return text;
     }
 
     /// <summary>Edita um parâmetro como a paleta ou o grip fariam, antes da avaliação:

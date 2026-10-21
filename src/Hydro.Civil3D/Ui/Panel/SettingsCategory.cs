@@ -46,6 +46,7 @@ internal sealed class SettingsCategory : IPanelCategory
             new("auto", "ATUALIZAR", new[] { "Atualização automática pelos tubos", DeviceWatcher.Enabled ? "ligada" : "desligada" }, "auto"),
             new("pontas", "CONECTOR", new[] { "Modo das pontas dos tubos (padrão)", Civil.NetworkSync.DefaultMode }, "pontas"),
             new("osnap", "CONECTOR", new[] { "Osnap de conector", ConnectorSnap.Active ? "ligado" : "desligado" }, "osnap"),
+            new("grips", "EDITAR", new[] { "Clique no grip", GripCommands.TypedInput ? "arrastar ou digitar o valor (HY_GRIP)" : "só arrastar (estiramento nativo)" }, "grips"),
             new("tema", "PAINEL", new[] { "Tema do painel", host.Theme.IsDark ? "escuro" : "claro" }, "tema"),
             new("log", "LOG", new[] { "Pasta do log", HydroLog.Folder }, "log"),
             new("versao", "INFO", new[] { "Versão", HydroLog.Environment() }, "versao"),
@@ -77,6 +78,13 @@ internal sealed class SettingsCategory : IPanelCategory
                     ui.Section("Osnap de conector")
                         .Action("Ligar", () => host.Send("HY_OSNAP Ligar ", "Osnap de conector ligado."))
                         .Action("Desligar", () => host.Send("HY_OSNAP Desligar ", "Osnap de conector desligado."));
+                    break;
+                case "grips":
+                    ui.Section("Grips dos dispositivos")
+                        .Note("Arrastar ou digitar: clicar o grip abre o HY_GRIP, com a mesma prévia do arrasto; digite o valor (1,50 ou 1.50) e Enter, ou Esc para não mudar nada.")
+                        .Note("Só arrastar: o estiramento nativo do AutoCAD, sem valor digitado. Vale na próxima seleção.")
+                        .Action("Arrastar ou digitar", () => host.Send("HY_GRIPMODO Digitar ", "Grips: arrastar ou digitar."))
+                        .Action("Só arrastar", () => host.Send("HY_GRIPMODO Nativo ", "Grips: estiramento nativo."));
                     break;
                 case "tema":
                     ui.Section("Tema").Note("Troque em Preferências..., no rodapé do painel.");

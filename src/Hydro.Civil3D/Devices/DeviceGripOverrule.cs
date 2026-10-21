@@ -1,19 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.GraphicsInterface;
-using Hydro.Civil3D.Geometry;
 using Hydro.Civil3D.Infra;
-using Hydro.Core.Csg;
 using Hydro.Core.Definition;
-using Hydro.Core.Editing;
-using Hydro.Core.Errors;
-using Hydro.Core.Results;
-using CorePlacement = Hydro.Core.Geometry.Placement;
-using GiPolyline = Autodesk.AutoCAD.GraphicsInterface.Polyline;
 
 namespace Hydro.Civil3D.Devices;
 
@@ -24,7 +16,10 @@ namespace Hydro.Civil3D.Devices;
 /// unidades do desenho). Arrastar mostra a prévia em aramado (avaliação do Core, sem ACIS); ao
 /// soltar, a edição vai para a fila do <see cref="DeviceWatcher"/> e o dispositivo se refaz no fim do
 /// comando — a geometria nunca é refeita dentro do overrule. Só se aplica a BlockReference com o
-/// registro do HYDRO (filtro pelo dicionário de extensão).</summary>
+/// registro do HYDRO (filtro pelo dicionário de extensão).
+/// <para>Com <see cref="GripCommands.TypedInput"/> ligado (o padrão), clicar o grip abre o
+/// <c>HY_GRIP</c> em vez do estiramento nativo: o mesmo arrasto com prévia, mais o valor digitado na
+/// linha de comando. Desligado, fica só o estiramento nativo.</para></summary>
 internal sealed class DeviceGripOverrule : GripOverrule
 {
     private static DeviceGripOverrule? _instance;
@@ -73,9 +68,11 @@ internal sealed class DeviceGripOverrule : GripOverrule
             }
 
             var placement = DeviceService.PlacementOf(reference);
+            var typed = GripCommands.TypedInput;
             foreach (var grip in entry.Instance.Grips.Where(g => g.Kind != GripKind.Perfil))
             {
-                grips.Add(new DeviceGrip(reference.ObjectId, entry, grip, placement, reference.BlockTransform));
+                var session = new GripSession(entry, grip, placement, reference.BlockTransform);
+                grips.Add(typed ? new TypedDeviceGrip(reference.ObjectId, session) : new DeviceGrip(reference.ObjectId, session));
             }
         }
         catch (Exception ex)
@@ -106,95 +103,41 @@ internal sealed class DeviceGripOverrule : GripOverrule
         }
     }
 
-    /// <summary>Grip ligado a um parâmetro.</summary>
-    private sealed class DeviceGrip : GripData
+
+    /// <summary>Grip ligado a um parâmetro, com o estiramento nativo do AutoCAD.</summary>
+    private class DeviceGrip : GripData
     {
-        private const short GlyphOutline = 7;
-
-        private readonly ObjectId _entity;
-        private readonly InstanceCache.Entry _entry;
-        private readonly GripInstance _grip;
-        private readonly CorePlacement _placement;
-        private readonly Matrix3d _toWorld;
-        private readonly Point3d _original;
-        private readonly Vector3d _direction;
-        private readonly Point3d _center;
-        private IReadOnlyList<WireLine>? _preview;
-        private double? _value;
-        private string _text = "";
-
-        public DeviceGrip(ObjectId entity, InstanceCache.Entry entry, GripInstance grip, CorePlacement placement, Matrix3d toWorld)
+        public DeviceGrip(ObjectId entity, GripSession session)
         {
-            _entity = entity;
-            _entry = entry;
-            _grip = grip;
-            _placement = placement;
-            _toWorld = toWorld;
-            _original = Solid3dBuilder.ToPoint(grip.Position).TransformBy(toWorld);
-            _direction = Solid3dBuilder.ToVector(grip.Direction).TransformBy(toWorld).GetNormal();
-            _center = Solid3dBuilder.ToPoint(grip.Center).TransformBy(toWorld);
-            GripPoint = _original;
+            Entity = entity;
+            Session = session;
+            GripPoint = session.Original;
             DrawAtDragImageGripPoint = true;
-            RubberBandLineDisabled = grip.Kind == GripKind.Rotacionar;
+            RubberBandLineDisabled = session.Grip.Kind == GripKind.Rotacionar;
         }
+
+        protected ObjectId Entity { get; }
+
+        protected GripSession Session { get; }
 
         /// <summary>Novo valor e prévia para o deslocamento do arrasto (chamado a cada movimento).</summary>
         public void Drag(Vector3d offset)
         {
-            var moved = _original + offset;
-            if (_grip.Kind == GripKind.Esticar)
-            {
-                // o grip de esticar anda só na direção do parâmetro
-                moved = _original + (_direction * offset.DotProduct(_direction));
-            }
-
-            GripPoint = moved;
-            var parameter = _entry.Definition.FindParameter(_grip.Parameter);
-            if (parameter is null || _entry.Instance.Parameters[_grip.Parameter] is not double current)
-            {
-                return;
-            }
-
-            var localDelta = _placement.DirectionToLocal(Solid3dBuilder.ToVec3(Point3d.Origin + (moved - _original)));
-            var value = DeviceEditing.GripValue(parameter, current, localDelta, _grip);
-            if (_value is { } previous && Math.Abs(previous - value) < 1e-9)
-            {
-                return;
-            }
-
-            _value = value;
-            try
-            {
-                var values = DeviceEditing.Edit(_entry.Definition, _entry.Instance.Parameters, parameter.Name, value, out _);
-                var instance = _entry.Definition.Evaluate(values, parameter.Name);
-                var affine = _placement.ToAffine();
-                _preview = instance.Solids.SelectMany(s => Wireframe.Of(s.Node, affine)).ToList();
-                _text = $"{parameter.Label ?? parameter.Name} = {value.ToString("0.###", CultureInfo.InvariantCulture)}{(parameter.Unit.Length > 0 ? " " + parameter.Unit : "")}";
-            }
-            catch (HydroException ex)
-            {
-                // valor que a definição recusa (validação): mostra o motivo e não deixa prévia
-                _preview = null;
-                _text = ex.Reason;
-            }
+            Session.DragTo(Session.Original + offset);
+            GripPoint = Session.Current;
         }
 
         public override void OnGripStatusChanged(ObjectId entityId, Status newStatus)
         {
-            switch (newStatus)
+            if (newStatus == Status.GripEnd && Session.Value is { } value)
             {
-                case Status.GripEnd when _value is { } value:
-                    DeviceWatcher.QueueGrip(_entity, _grip.Parameter, value);
-                    break;
-                case Status.GripAbort:
-                    GripPoint = _original;
-                    break;
+                DeviceWatcher.QueueGrip(Entity, Session.Grip.Parameter, value);
             }
 
             if (newStatus is Status.GripEnd or Status.GripAbort)
             {
-                _value = null;
-                _preview = null;
+                Session.Reset();
+                GripPoint = Session.Original;
             }
 
             base.OnGripStatusChanged(entityId, newStatus);
@@ -205,30 +148,12 @@ internal sealed class DeviceGripOverrule : GripOverrule
             try
             {
                 var at = imageGripPoint ?? GripPoint;
-                if (worldDraw.IsDragging && _preview is not null)
+                if (worldDraw.IsDragging)
                 {
-                    DrawPreview(worldDraw);
+                    Session.Draw(worldDraw, at, dGripSize * 2.5);
                 }
 
-                if (worldDraw.IsDragging && _text.Length > 0)
-                {
-                    worldDraw.SubEntityTraits.Color = 2;
-                    worldDraw.Geometry.Text(at + new Vector3d(dGripSize * 2, dGripSize * 2, 0), Vector3d.ZAxis, Vector3d.XAxis, dGripSize * 2.5, 1, 0, _text);
-                }
-
-                worldDraw.SubEntityTraits.FillType = FillType.FillAlways;
-                switch (_grip.Kind)
-                {
-                    case GripKind.Rotacionar:
-                        DrawRotate(worldDraw, at, dGripSize);
-                        break;
-                    case GripKind.Perfil:
-                        DrawDiamond(worldDraw, at, dGripSize);
-                        break;
-                    default:
-                        DrawArrow(worldDraw, at, dGripSize);
-                        break;
-                }
+                GripGlyphs.Draw(worldDraw, Session, at, dGripSize);
             }
             catch (Exception ex)
             {
@@ -240,93 +165,119 @@ internal sealed class DeviceGripOverrule : GripOverrule
 
         public override string GetTooltip()
         {
-            var parameter = _entry.Definition.FindParameter(_grip.Parameter);
-            var verb = _grip.Kind == GripKind.Rotacionar ? "Girar" : "Esticar";
-            return $"{verb}: {parameter?.Label ?? _grip.Parameter}";
+            var verb = Session.Grip.Kind == GripKind.Rotacionar ? "Girar" : "Esticar";
+            return $"{verb}: {Session.Parameter?.Label ?? Session.Grip.Parameter}";
+        }
+    }
+
+    /// <summary>Grip que, ao ser clicado, abre o <c>HY_GRIP</c> (arrastar ou digitar o valor) em vez
+    /// do estiramento nativo. É um grip de disparo (<see cref="GripData.TriggerGrip"/>): o AutoCAD só
+    /// chama <see cref="OnHotGrip"/>, e o grip volta a morno.</summary>
+    private sealed class TypedDeviceGrip : DeviceGrip
+    {
+        public TypedDeviceGrip(ObjectId entity, GripSession session)
+            : base(entity, session)
+        {
+            TriggerGrip = true;
         }
 
-        /// <summary>Seta (cabeça triangular + haste) ao longo da direção, com 2× o tamanho do grip;
-        /// vista de cima, um grip vertical aparece também como círculo.</summary>
-        private void DrawArrow(WorldDraw wd, Point3d at, double size)
+        public override ReturnValue OnHotGrip(ObjectId entityId, Context contextFlags)
         {
-            size *= 2;
-            var x = _direction;
-            var viewDir = ViewDirection();
-            if (Math.Abs(x.DotProduct(viewDir)) > 0.999)
-            {
-                // seta vista de ponta (grip vertical visto de cima): círculo, como no SOLIDOS
-                wd.SubEntityTraits.Color = 3;
-                wd.Geometry.Circle(at, size * 0.75, viewDir);
-                Outline(wd, () => wd.Geometry.Circle(at, size * 0.75, viewDir));
-                return;
-            }
+            GripCommands.Start(Entity, Session.Grip.Parameter);
+            return ReturnValue.GripHotToWarm;
+        }
 
-            // a seta fica no plano da tela que contém a direção
-            var y = viewDir.CrossProduct(x).GetNormal();
+        public override string GetTooltip() => base.GetTooltip() + " (clique: arraste ou digite o valor)";
+    }
+}
 
-            var shape = new[] { (0.0, 0.7), (0.8, 0.0), (0.0, -0.7), (0.0, -0.3), (-0.5, -0.3), (-0.5, 0.3), (0.0, 0.3) };
-            var points = new Point3dCollection(shape.Select(p => at + (x * (p.Item1 * size)) + (y * (p.Item2 * size))).ToArray());
+/// <summary>Desenho dos grips do SOLIDOS (que imitam os do Civil 3D), usado pelos grips e pelo
+/// <see cref="GripEditJig"/>: esticar = seta verde (ACI 3), rotacionar = círculo ciano (ACI 4) ligado
+/// ao centro, perfil = losango ciano; contorno ACI 7.</summary>
+internal static class GripGlyphs
+{
+    private const short Outline = 7;
+
+    public static void Draw(WorldDraw wd, GripSession session, Point3d at, double size)
+    {
+        wd.SubEntityTraits.FillType = FillType.FillAlways;
+        switch (session.Grip.Kind)
+        {
+            case GripKind.Rotacionar:
+                DrawRotate(wd, session.Center, at, size);
+                break;
+            case GripKind.Perfil:
+                DrawDiamond(wd, at, size);
+                break;
+            default:
+                DrawArrow(wd, session.Direction, at, size);
+                break;
+        }
+    }
+
+    /// <summary>Seta (cabeça triangular + haste) ao longo da direção, com 2× o tamanho do grip;
+    /// vista de cima, um grip vertical aparece também como círculo.</summary>
+    private static void DrawArrow(WorldDraw wd, Vector3d x, Point3d at, double size)
+    {
+        size *= 2;
+        var viewDir = ViewDirection();
+        if (Math.Abs(x.DotProduct(viewDir)) > 0.999)
+        {
+            // seta vista de ponta (grip vertical visto de cima): círculo, como no SOLIDOS
             wd.SubEntityTraits.Color = 3;
-            wd.Geometry.Polygon(points);
-            Outline(wd, () => wd.Geometry.Polygon(points));
+            wd.Geometry.Circle(at, size * 0.75, viewDir);
+            Outlined(wd, () => wd.Geometry.Circle(at, size * 0.75, viewDir));
+            return;
         }
 
-        /// <summary>Linha do centro ao grip e círculo cheio de raio 1,2× com contorno de raio 1×.</summary>
-        private void DrawRotate(WorldDraw wd, Point3d at, double size)
+        // a seta fica no plano da tela que contém a direção
+        var y = viewDir.CrossProduct(x).GetNormal();
+
+        var shape = new[] { (0.0, 0.7), (0.8, 0.0), (0.0, -0.7), (0.0, -0.3), (-0.5, -0.3), (-0.5, 0.3), (0.0, 0.3) };
+        var points = new Point3dCollection(shape.Select(p => at + (x * (p.Item1 * size)) + (y * (p.Item2 * size))).ToArray());
+        wd.SubEntityTraits.Color = 3;
+        wd.Geometry.Polygon(points);
+        Outlined(wd, () => wd.Geometry.Polygon(points));
+    }
+
+    /// <summary>Linha do centro ao grip e círculo cheio de raio 1,2× com contorno de raio 1×.</summary>
+    private static void DrawRotate(WorldDraw wd, Point3d center, Point3d at, double size)
+    {
+        wd.SubEntityTraits.Color = 4;
+        wd.Geometry.WorldLine(center, at);
+        wd.Geometry.Circle(at, size * 1.2, Vector3d.ZAxis);
+        Outlined(wd, () => wd.Geometry.Circle(at, size, Vector3d.ZAxis));
+    }
+
+    private static void DrawDiamond(WorldDraw wd, Point3d at, double size)
+    {
+        var points = new Point3dCollection(new[]
         {
-            wd.SubEntityTraits.Color = 4;
-            wd.Geometry.WorldLine(_center, at);
-            wd.Geometry.Circle(at, size * 1.2, Vector3d.ZAxis);
-            Outline(wd, () => wd.Geometry.Circle(at, size, Vector3d.ZAxis));
+            at + new Vector3d(0, size, 0), at + new Vector3d(-size / 2, 0, 0), at + new Vector3d(0, -size, 0), at + new Vector3d(size / 2, 0, 0),
+        });
+        wd.SubEntityTraits.Color = 4;
+        wd.Geometry.Polygon(points);
+        Outlined(wd, () => wd.Geometry.Polygon(points));
+    }
+
+    private static void Outlined(WorldDraw wd, Action draw)
+    {
+        wd.SubEntityTraits.FillType = FillType.FillNever;
+        wd.SubEntityTraits.Color = Outline;
+        draw();
+        wd.SubEntityTraits.FillType = FillType.FillAlways;
+    }
+
+    private static Vector3d ViewDirection()
+    {
+        try
+        {
+            var value = Autodesk.AutoCAD.ApplicationServices.Core.Application.GetSystemVariable("VIEWDIR");
+            return value is Point3d p && p.GetAsVector().Length > 1e-12 ? p.GetAsVector().GetNormal() : Vector3d.ZAxis;
         }
-
-        private static void DrawDiamond(WorldDraw wd, Point3d at, double size)
+        catch (Exception)
         {
-            var points = new Point3dCollection(new[]
-            {
-                at + new Vector3d(0, size, 0), at + new Vector3d(-size / 2, 0, 0), at + new Vector3d(0, -size, 0), at + new Vector3d(size / 2, 0, 0),
-            });
-            wd.SubEntityTraits.Color = 4;
-            wd.Geometry.Polygon(points);
-            Outline(wd, () => wd.Geometry.Polygon(points));
-        }
-
-        private static void Outline(WorldDraw wd, Action draw)
-        {
-            wd.SubEntityTraits.FillType = FillType.FillNever;
-            wd.SubEntityTraits.Color = GlyphOutline;
-            draw();
-            wd.SubEntityTraits.FillType = FillType.FillAlways;
-        }
-
-        /// <summary>Aramado do dispositivo com o valor novo: peças em amarelo, furos em cinza.</summary>
-        private void DrawPreview(WorldDraw wd)
-        {
-            wd.SubEntityTraits.FillType = FillType.FillNever;
-            foreach (var line in _preview!)
-            {
-                wd.SubEntityTraits.Color = line.Removed ? (short)8 : (short)2;
-                var points = new Point3dCollection(line.Points.Select(Solid3dBuilder.ToPoint).ToArray());
-                if (line.Closed && points.Count > 2)
-                {
-                    points.Add(points[0]);
-                }
-
-                wd.Geometry.Polyline(points, Vector3d.ZAxis, IntPtr.Zero);
-            }
-        }
-
-        private static Vector3d ViewDirection()
-        {
-            try
-            {
-                var value = Autodesk.AutoCAD.ApplicationServices.Core.Application.GetSystemVariable("VIEWDIR");
-                return value is Point3d p && p.GetAsVector().Length > 1e-12 ? p.GetAsVector().GetNormal() : Vector3d.ZAxis;
-            }
-            catch (Exception)
-            {
-                return Vector3d.ZAxis;
-            }
+            return Vector3d.ZAxis;
         }
     }
 }

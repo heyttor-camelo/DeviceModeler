@@ -129,6 +129,10 @@ parametros:
     Aparece nas projeções em ProfileView (F4). Desenho: losango ciano.
   - Os valores respeitam `min`/`max`/`valores` e passam por `DeviceEditing.Edit` (códigos de catálogo
     e `ao_editar`).
+  - **Valor digitado:** com o grip clicado (`HY_GRIP`), um número digitado é o **valor final** do
+    parâmetro, não o deslocamento. Num grip simétrico (`fator: 2`), digitar 1,50 deixa a dimensão em
+    1,50. Vale vírgula ou ponto decimal e a unidade no fim (`1,50 m`, `45°`). Fora de `min`/`max`, o
+    valor fica no limite, com aviso (`DeviceEditing.TryParseGripInput`).
 - **`alvo`** indica de onde a Fase 2 pode tirar o valor: `superficie`, `alinhamento`, `perfil`,
   `polilinha` ou `tubo`.
 - **Conexões:** `angulo` em graus, medido em planta a partir de +X local no sentido anti-horário;
@@ -473,7 +477,9 @@ para a série R25.1 (Civil 3D 2026).
 |---------|-----------|
 | `HY_INSERIR` | Abre uma janela com a lista do catálogo, o PropertyGrid dos parâmetros e um resumo que se recalcula a cada alteração (variáveis, quantitativos, avisos e erros; o OK só é habilitado quando tudo é válido). Depois pede o ponto e a rotação com jig e, se a definição tiver `alvo: superficie`, a superfície da cota da tampa |
 | `HY_EDITAR` | Mesma janela, com os valores atuais; regenera ao confirmar |
-| *grips* | Cada parâmetro com `grip:` ganha um grip (seta, círculo de rotação ou losango de perfil). Arraste: a prévia em aramado e o valor aparecem durante o arrasto, e o dispositivo se refaz ao soltar |
+| *grips* | Cada parâmetro com `grip:` ganha um grip (seta, círculo de rotação ou losango de perfil). Clique no grip: abre o `HY_GRIP` |
+| `HY_GRIP` | Edição pelo grip. A linha de comando mostra `L = 1,20 m — arraste ou digite o novo valor`. Arraste: a prévia em aramado e o valor acompanham o cursor, e o clique confirma. Ou digite o número (1,50 ou 1.50) e Enter: o parâmetro recebe esse valor exato, dentro de min/max. Esc, ou Enter sem nada, não muda nada. O dispositivo se refaz no fim do comando. Digitado sem grip, pede o dispositivo e o parâmetro |
+| `HY_GRIPMODO` | `Digitar` (padrão): o clique no grip abre o `HY_GRIP`. `Nativo`: o grip usa só o estiramento nativo do AutoCAD (arrastar com prévia, sem valor digitado). Também na categoria Configuração |
 | `HY_CONECTAR` | Liga tubos de Pipe Network ao dispositivo (substitui ou adiciona). Preenche `Conexoes` (ângulo, cota de fundo, diâmetros interno e externo, handle) e os parâmetros com `alvo: tubo` (menor cota de fundo). O PV abre os furos e cria os conectores |
 | `HY_SUPERFICIE` | Parâmetros com `alvo: superficie` passam a valer a elevação da superfície no ponto de inserção. Com "Acompanhar" (padrão), a elevação é refeita quando a superfície mudar |
 | `HY_AUDITAR` | Lista os problemas dos dispositivos (esquema antigo, YAML ausente ou alterado, bloco compartilhado, nome ou id repetido, conexão para tubo apagado, superfície apagada) e oferece as correções automáticas. A categoria Verificação do painel mostra a mesma lista |
@@ -579,6 +585,12 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
   fixas, como no SOLIDOS (ele não usa `GRIPCOLOR`/`GRIPHOT`). Ao arrastar, o grip desenha a prévia
   em aramado (avaliação do Core, sem ACIS) e o valor; ao soltar, a edição vai para a fila e o
   dispositivo se refaz no fim do `GRIP_STRETCH`. A geometria nunca é refeita dentro do overrule.
+  No modo `Digitar` (padrão), o grip é um *grip de disparo* (`TriggerGrip` + `OnHotGrip`). O clique
+  manda `HY_GRIP` para a linha de comando, e o comando faz o mesmo arrasto num `DrawJig` (mesma
+  `GripSession`, mesma prévia), numa pergunta de ponto que aceita texto e não tem ponto base (com
+  ponto base, um número viraria distância direta). Durante a pergunta, a vírgula digitada vira ponto
+  (`PreTranslateMessage`), senão o AutoCAD leria "1,50" como o ponto (1; 50). A entrada de ponteiro
+  da entrada dinâmica (bit 1 do `DYNMODE`) fica desligada e volta no fim.
 - **Fila no fim do comando** (`DeviceWatcher`): os eventos e overrules só enfileiram; no
   `CommandEnded`, com o documento travado, as fases rodam em ordem: grips → cópias → tubos apagados
   → tubos alterados → superfícies alteradas → dependentes de dispositivos apagados. Ignora UNDO/REDO.
@@ -605,9 +617,20 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
 2. `HY_INSERIR` → PV retangular → mude `CotaTampa` para 103 e veja o resumo recalcular. Ponha
    `L = 5`: o PropertyGrid recusa. Clique em OK, escolha o ponto e a rotação, pule a superfície.
 3. Confira as camadas `HY-CONCRETO`, `HY-DEGRAUS` (H > 2 m) e `HY-TAMPA`.
-4. Selecione o PV: os grips de `L`, `B` e `CotaTampa` aparecem como setas verdes com contorno. Arraste
-   o de `L`: o aramado amarelo e o valor acompanham o cursor; ao soltar, o PV se refaz. Esc no meio
-   do arrasto não muda nada.
+4. Selecione o PV: os grips de `L`, `B` e `CotaTampa` aparecem como setas verdes com contorno.
+   - Clique no grip de `L`: a linha de comando mostra `L = 1,20 m — arraste ou digite o novo valor`.
+     Arraste: o aramado amarelo e o valor acompanham o cursor; clique e o PV se refaz.
+   - Clique de novo no grip de `L`, digite `1,50` e Enter: `L` fica em 1,50 m exatos (não 1,20 + 1,50
+     nem 1,20 + 2 × 1,50). Repita com `1.60`.
+   - Digite `5`: aviso "L: 5,00 m → 3,00 m (máximo)" e L = 3,00. Digite `abc`: aviso e a pergunta
+     volta.
+   - Esc no meio do arrasto, ou depois de digitar, não muda nada. Enter sem nada também não.
+   - Com a entrada dinâmica ligada (F12), repita o `1,50`: deve funcionar igual. No fim, confira que o
+     `DYNMODE` voltou ao valor de antes.
+   - `HY_GRIPMODO Nativo`, desmarque e marque o PV de novo: o grip volta ao estiramento nativo
+     (arrastar com prévia, sem digitar). Volte com `HY_GRIPMODO Digitar`.
+   - Se o clique no grip entrar no estiramento nativo **e** abrir o `HY_GRIP` junto, anote: é o
+     comportamento do `TriggerGrip` a confirmar no CAD.
 5. Desenhe uma rede de tubos chegando ao PV e rode `HY_CONECTAR`: aparecem os furos e
    `CotaFundo` passa a valer a menor cota de fundo.
 6. Mova a ponta de um tubo: com `HY_AUTO` ligado, o furo acompanha.
@@ -659,8 +682,7 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
 
 - A categoria `linear` (seção varrida ao longo de alinhamento/perfil, para sarjetas e valetas)
   ainda não tem gerador.
-- O grip pede o ponto final, mas ainda não mostra a prévia da geometria durante o arrasto.
-- A superfície não é acompanhada automaticamente: rode `HY_SUPERFICIE` de novo.
-- **Presets de catálogo:** escolher um código do álbum DNIT IPR 736 preencherá as dimensões, e
-  editar uma dimensão manualmente mudará o código para "genérico".
+- **Catálogo DNIT:** os códigos (`predefinicoes`) já funcionam, mas as dimensões do catálogo são de
+  referência; falta conferir com o álbum IPR 736.
+- No `HY_GRIP` não dá para digitar coordenadas (a vírgula vira ponto); para um ponto exato, use osnap.
 - Nós SWMM de armazenamento (storage) e de descarga (outfall), e exportação dos condutos.
