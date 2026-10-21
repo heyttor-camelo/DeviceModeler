@@ -1,4 +1,3 @@
-﻿using Modeler.Core.Errors;
 using Modeler.Core.Expressions;
 using Modeler.Core.Results;
 
@@ -18,19 +17,25 @@ internal sealed class FlowScope : IEvaluationContext, IOutputSink
     private readonly IReadOnlyDictionary<string, object> _globals;
     private readonly Dictionary<string, object> _locals = new(StringComparer.Ordinal);
 
-    public FlowScope(IReadOnlyDictionary<string, object> globals, FunctionRegistry functions)
+    public FlowScope(IReadOnlyDictionary<string, object> globals, FunctionRegistry functions, string? edited = null)
     {
         _globals = globals;
         Functions = functions;
+        Edited = edited;
     }
 
     public FunctionRegistry Functions { get; }
 
     public object? Host => this;
 
+    public string? Edited { get; }
+
     public List<NamedSolid> Solids { get; } = new();
 
     public List<Connector> Connectors { get; } = new();
+
+    /// <summary>Linhas de <c>mensagem:</c>.</summary>
+    public List<string> Log { get; } = new();
 
     public IReadOnlyDictionary<string, object> Locals => _locals;
 
@@ -69,13 +74,16 @@ internal sealed class GlobalScope : IEvaluationContext
 {
     private readonly Dictionary<string, object> _values;
 
-    public GlobalScope(Dictionary<string, object> values, FunctionRegistry functions)
+    public GlobalScope(Dictionary<string, object> values, FunctionRegistry functions, string? edited = null)
     {
         _values = values;
         Functions = functions;
+        Edited = edited;
     }
 
     public FunctionRegistry Functions { get; }
+
+    public string? Edited { get; }
 
     public bool TryGetValue(string name, out object value) => _values.TryGetValue(name, out value!);
 }

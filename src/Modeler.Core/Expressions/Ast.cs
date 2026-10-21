@@ -9,6 +9,9 @@ public sealed record StringNode(string Value, int Position) : Node(Position);
 
 public sealed record BoolNode(bool Value, int Position) : Node(Position);
 
+/// <summary>Literal <c>nulo</c> (ausência de valor, ver <c>existe()</c> e <c>ou()</c>).</summary>
+public sealed record NullNode(int Position) : Node(Position);
+
 public sealed record ListNode(IReadOnlyList<Node> Items, int Position) : Node(Position);
 
 public sealed record IdentifierNode(string Name, int Position) : Node(Position);

@@ -10,11 +10,12 @@ internal sealed class ExpressionParser
     private static readonly HashSet<string> NotWords = new(StringComparer.Ordinal) { "nao", "não", "not" };
     private static readonly HashSet<string> TrueWords = new(StringComparer.Ordinal) { "verdadeiro", "true" };
     private static readonly HashSet<string> FalseWords = new(StringComparer.Ordinal) { "falso", "false" };
+    private static readonly HashSet<string> NullWords = new(StringComparer.Ordinal) { "nulo", "null" };
     private static readonly HashSet<string> Comparisons = new(StringComparer.Ordinal) { "==", "!=", "<>", "<", "<=", ">", ">=" };
 
     /// <summary>Palavras que não podem ser usadas como nome de parâmetro/variável.</summary>
     public static readonly IReadOnlySet<string> Keywords = new HashSet<string>(
-        OrWords.Concat(AndWords).Concat(NotWords).Concat(TrueWords).Concat(FalseWords), StringComparer.Ordinal);
+        OrWords.Concat(AndWords).Concat(NotWords).Concat(TrueWords).Concat(FalseWords).Concat(NullWords), StringComparer.Ordinal);
 
     private readonly List<Token> _tokens;
     private int _index;
@@ -246,6 +247,18 @@ internal sealed class ExpressionParser
                 if (FalseWords.Contains(token.Text))
                 {
                     return new BoolNode(false, token.Position);
+                }
+
+                if (NullWords.Contains(token.Text))
+                {
+                    return new NullNode(token.Position);
+                }
+
+                // ou(x, padrao) na posição de valor é a função de coalescência, não o operador
+                if (OrWords.Contains(token.Text) && IsSymbol("("))
+                {
+                    Advance();
+                    return new CallNode("ou", ParseArguments(), token.Position);
                 }
 
                 if (Keywords.Contains(token.Text))

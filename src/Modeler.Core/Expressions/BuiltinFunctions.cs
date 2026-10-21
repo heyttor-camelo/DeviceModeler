@@ -88,6 +88,8 @@ internal static class BuiltinFunctions
             MakeArray(c, c.Solid(0), c.Integer(1), c.Vector(2)),
             description: "n cópias deslocadas de passo = [dx, dy, dz]"));
 
+        RegisterProfiles(r);
+
         r.Register(new FunctionDef("expor_solido", new[] { "nome", "solido", "material" }, 2, c =>
         {
             var solid = c.Solid(1);
@@ -106,6 +108,129 @@ internal static class BuiltinFunctions
             Sink(c).AddConnector(connector, c);
             return true;
         }, description: "publica um conector de tubulação (somente no fluxo)"), "connector");
+    }
+
+    /// <summary>Perfis, extrusão, planos e corte (linguagem v2), mais vetores e <c>editado()</c>.</summary>
+    private static void RegisterProfiles(FunctionRegistry r)
+    {
+        r.Register(new FunctionDef("polilinha", new[] { "pontos", "fechada", "convexidades", "z" }, 1, c =>
+        {
+            var z = c.Number(3, 0);
+            var points = c.List(0).Select((p, i) => Values.TryToPoint(p, z, out var v)
+                ? v
+                : throw c.Error($"vértice {i + 1} deve ser [x, y] ou [x, y, z], mas é {Values.TypeName(p)}", 0)).ToList();
+            var bulges = c.Has(2) ? c.List(2).Select((b, i) => b as double? ?? throw c.Error($"convexidade {i + 1} deve ser número", 2)).ToList() : new List<double>();
+            return MakeProfile(c, points, bulges, !c.Has(1) || Bool(c, 1));
+        }, description: "perfil plano pelos vértices (convexidades = bulge por trecho, como no AutoCAD)"), "polyline");
+        r.Register(new FunctionDef("retangulo", new[] { "L", "B", "centro", "rotacao" }, 2, c =>
+        {
+            var (l, b) = (c.Positive(0) / 2, c.Positive(1) / 2);
+            var center = c.Vector(2, Vec3.Zero);
+            var rotation = Affine.Rotation(c.Number(3, 0), Vec3.UnitZ, center);
+            var corners = new[] { new Vec3(-l, -b, 0), new Vec3(l, -b, 0), new Vec3(l, b, 0), new Vec3(-l, b, 0) }
+                .Select(p => rotation.Apply(center + p)).ToList();
+            return new Profile(corners, Array.Empty<double>(), true);
+        }, description: "perfil retangular L (X) × B (Y) centrado, girado 'rotacao' graus"), "rectangle");
+        r.Register(new FunctionDef("circulo", new[] { "centro", "raio" }, 2, c =>
+        {
+            var center = c.Vector(0);
+            var radius = c.Positive(1);
+            return new Profile(new[] { center + new Vec3(-radius, 0, 0), center + new Vec3(radius, 0, 0) }, new[] { 1.0, 1.0 }, true);
+        }, description: "perfil circular em planta (dois arcos)"), "circle");
+        r.Register(new FunctionDef("extrudar", new[] { "perfil", "altura", "direcao" }, 2, c =>
+        {
+            var profile = c.Value(0) as Profile ?? throw c.Error($"'perfil' deve ser perfil (polilinha, retangulo...), mas é {Values.TypeName(c.Value(0))}", 0);
+            if (!profile.Closed)
+            {
+                throw c.Error("o perfil precisa ser fechado", 0);
+            }
+
+            var direction = c.Axis(2, Vec3.UnitZ);
+            if (Math.Abs(Affine.Dot(direction, profile.Normal)) < 1e-6)
+            {
+                throw c.Error("a direção da extrusão está no plano do perfil", 2);
+            }
+
+            return new ExtrudeNode(profile, direction * c.Positive(1));
+        }, description: "sólido pela extrusão de um perfil fechado (direção padrão +Z)"), "extrude");
+        r.Register(new FunctionDef("plano", new[] { "origem", "normal" }, 2, c => new Plane(c.Vector(0), c.Axis(1, Vec3.UnitZ)),
+            description: "plano por um ponto e a normal"), "plane");
+        r.Register(new FunctionDef("plano3", new[] { "p1", "p2", "p3" }, 3, c =>
+        {
+            var (a, b, d) = (c.Vector(0), c.Vector(1), c.Vector(2));
+            var normal = Affine.Cross(b - a, d - a);
+            return normal.Length < 1e-12
+                ? throw c.Error("os três pontos estão alinhados (não definem um plano)")
+                : new Plane(a, normal.Normalized());
+        }, description: "plano pelos três pontos; normal = (p2 − p1) × (p3 − p1)"), "plane3");
+        r.Register(new FunctionDef("cortar", new[] { "solido", "plano" }, 2, c =>
+        {
+            var plane = c.Value(1) as Plane ?? throw c.Error($"'plano' deve ser plano (plano, plano3), mas é {Values.TypeName(c.Value(1))}", 1);
+            return Wrap(c.Solid(0), s => new CutNode(s, plane));
+        }, description: "corta o sólido pelo plano; fica a parte do lado da normal"), "cut");
+
+        r.Register(new FunctionDef("distancia", new[] { "p", "q" }, 2, c => (c.Vector(1) - c.Vector(0)).Length,
+            description: "distância 3D entre dois pontos"), "distance");
+        r.Register(new FunctionDef("distancia2d", new[] { "p", "q" }, 2, c =>
+        {
+            var d = c.Vector(1) - c.Vector(0);
+            return Math.Sqrt((d.X * d.X) + (d.Y * d.Y));
+        }, description: "distância em planta"));
+        r.Register(new FunctionDef("normalizar", new[] { "v" }, 1, c =>
+        {
+            var v = c.Vector(0);
+            return v.Length < 1e-12 ? throw c.Error("vetor nulo não pode ser normalizado", 0) : Values.FromVec3(v.Normalized());
+        }, description: "vetor unitário"), "normalize");
+        r.Register(new FunctionDef("cruz", new[] { "a", "b" }, 2, c => Values.FromVec3(Affine.Cross(c.Vector(0), c.Vector(1))),
+            description: "produto vetorial"), "cross");
+        r.Register(new FunctionDef("escalar", new[] { "a", "b" }, 2, c => Affine.Dot(c.Vector(0), c.Vector(1)),
+            description: "produto escalar"), "dot");
+        r.Register(new FunctionDef("editado", Array.Empty<string>(), 0, c => c.Context.Edited ?? "",
+            description: "nome do último parâmetro editado (paleta ou grip); texto vazio se nenhum"), "edited");
+    }
+
+    private static bool Bool(FunctionCall c, int index) => c.Value(index) is bool b ? b : throw c.Error("deve ser verdadeiro ou falso", index);
+
+    private static Profile MakeProfile(FunctionCall c, List<Vec3> points, List<double> bulges, bool closed)
+    {
+        if (points.Count < 2)
+        {
+            throw c.Error("o perfil precisa de ao menos 2 vértices", 0);
+        }
+
+        // fechado: o último vértice igual ao primeiro é descartado (o fechamento é implícito)
+        if (closed && points.Count > 2 && (points[^1] - points[0]).Length < 1e-9)
+        {
+            points.RemoveAt(points.Count - 1);
+        }
+
+        var segments = closed ? points.Count : points.Count - 1;
+        if (bulges.Count > segments)
+        {
+            throw c.Error($"{bulges.Count} convexidades para {segments} trecho(s)", 2);
+        }
+
+        for (var s = 0; s < segments; s++)
+        {
+            if ((points[(s + 1) % points.Count] - points[s]).Length < 1e-9)
+            {
+                throw c.Error($"trecho {s + 1} do perfil tem comprimento zero (vértices repetidos)", 0);
+            }
+        }
+
+        if (closed && points.Count < 3 && bulges.All(b => Math.Abs(b) < 1e-12))
+        {
+            throw c.Error("perfil fechado sem arcos precisa de ao menos 3 vértices", 0);
+        }
+
+        var profile = new Profile(points, bulges, closed);
+        var normal = profile.Normal;
+        if (points.Any(p => Math.Abs(Affine.Dot(p - points[0], normal)) > 1e-6))
+        {
+            throw c.Error("os vértices do perfil não estão num mesmo plano", 0);
+        }
+
+        return profile;
     }
 
     private static FunctionDef Unary(string name, Func<double, double> f, string description) =>

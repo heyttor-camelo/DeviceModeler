@@ -22,6 +22,25 @@ public sealed class DeviceDefinition
 
     public string? Description { get; internal set; }
 
+    /// <summary>Família (<c>familia</c>): agrupa no catálogo, na lista de materiais e nos rótulos.</summary>
+    public string? Family { get; internal set; }
+
+    /// <summary>Subtipo (<c>subtipo</c>), por exemplo o material.</summary>
+    public string? Subtype { get; internal set; }
+
+    /// <summary>Código da instância (<c>codigo</c>): modelo avaliado com parâmetros e variáveis,
+    /// em <see cref="DeviceInstance.Code"/>.</summary>
+    public Text.Template? CodeTemplate { get; internal set; }
+
+    /// <summary>Modelos de nome e de dica (<c>modelos</c>).</summary>
+    public TemplatesDef Templates { get; internal set; } = new(null, null);
+
+    /// <summary>Códigos de catálogo que preenchem as dimensões (<c>predefinicoes</c>).</summary>
+    public PresetsDef? Presets { get; internal set; }
+
+    /// <summary>Redundâncias resolvidas na edição (<c>ao_editar</c>), por parâmetro editado.</summary>
+    public IReadOnlyList<EditRuleDef> EditRules { get; internal set; } = Array.Empty<EditRuleDef>();
+
     public IReadOnlyList<ParameterDef> Parameters { get; internal set; } = Array.Empty<ParameterDef>();
 
     /// <summary>Variáveis já em ordem de dependência (cada uma depois das que usa).</summary>
@@ -50,6 +69,7 @@ public sealed class DeviceDefinition
 
     /// <summary>Avalia uma instância. Parâmetros omitidos usam o padrão. Lança
     /// <see cref="Errors.ParameterValidationException"/> ou <see cref="Errors.EvaluationException"/>.</summary>
-    public DeviceInstance Evaluate(IReadOnlyDictionary<string, object>? values = null) =>
-        DeviceEvaluator.Evaluate(this, values);
+    /// <param name="edited">parâmetro editado por último (paleta ou grip), visto por <c>editado()</c>.</param>
+    public DeviceInstance Evaluate(IReadOnlyDictionary<string, object>? values = null, string? edited = null) =>
+        DeviceEvaluator.Evaluate(this, values, edited);
 }

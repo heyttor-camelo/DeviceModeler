@@ -233,5 +233,8 @@ public sealed class FunctionRegistry
 
     public bool TryGet(string name, out FunctionDef function) => _functions.TryGetValue(name, out function!);
 
-    public bool Contains(string name) => _functions.ContainsKey(name) || name is "se" or "if";
+    public bool Contains(string name) => _functions.ContainsKey(name) || IsLazy(name);
+
+    /// <summary>Funções tratadas direto pelo avaliador (argumentos avaliados sob demanda).</summary>
+    public static bool IsLazy(string name) => name is "se" or "if" or "existe" or "exists" or "ou" or "coalesce";
 }

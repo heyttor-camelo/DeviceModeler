@@ -29,4 +29,10 @@ public sealed class NaiveVolume : ICsgVisitor<double>
     public double VisitRotate(RotateNode node) => node.Child.Accept(this);
 
     public double VisitArray(ArrayNode node) => node.Count * node.Child.Accept(this);
+
+    /// <summary>Área do perfil × componente do vetor na normal (prisma oblíquo tem o mesmo volume).</summary>
+    public double VisitExtrude(ExtrudeNode node) => node.Profile.Area() * Math.Abs(Affine.Dot(node.Vector, node.Profile.Normal));
+
+    public double VisitCut(CutNode node) =>
+        throw new NotSupportedException("NaiveVolume não calcula cortes por plano; use o volume do sólido real ou um quantitativo analítico.");
 }

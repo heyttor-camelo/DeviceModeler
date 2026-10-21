@@ -64,3 +64,17 @@ public sealed record ArrayNode(CsgNode Child, int Count, Vec3 Step) : CsgNode
 {
     public override T Accept<T>(ICsgVisitor<T> visitor) => visitor.VisitArray(this);
 }
+
+/// <summary>Extrusão do perfil fechado <paramref name="Profile"/> ao longo de <paramref name="Vector"/>
+/// (direção × altura). O perfil fica na face inicial.</summary>
+public sealed record ExtrudeNode(Profile Profile, Vec3 Vector) : CsgNode
+{
+    public override T Accept<T>(ICsgVisitor<T> visitor) => visitor.VisitExtrude(this);
+}
+
+/// <summary><paramref name="Child"/> cortado por <paramref name="Plane"/>: fica a parte do lado para
+/// onde a normal do plano aponta.</summary>
+public sealed record CutNode(CsgNode Child, Plane Plane) : CsgNode
+{
+    public override T Accept<T>(ICsgVisitor<T> visitor) => visitor.VisitCut(this);
+}

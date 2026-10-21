@@ -9,6 +9,9 @@ public interface IEvaluationContext
     /// nulo fora do fluxo.</summary>
     object? Host => null;
 
+    /// <summary>Nome do último parâmetro editado (paleta ou grip), para <c>editado()</c>; nulo se nenhum.</summary>
+    string? Edited => null;
+
     bool TryGetValue(string name, out object value);
 }
 

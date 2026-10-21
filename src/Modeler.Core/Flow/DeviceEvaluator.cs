@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Modeler.Core.Csg;
 using Modeler.Core.Definition;
 using Modeler.Core.Errors;
@@ -7,19 +6,20 @@ using Modeler.Core.Results;
 
 namespace Modeler.Core.Flow;
 
-/// <summary>Avalia uma definição: parâmetros → variáveis → validações → fluxo → saídas.</summary>
-internal static partial class DeviceEvaluator
+/// <summary>Avalia uma definição: parâmetros (com o código de catálogo aplicado) → variáveis →
+/// validações → código → fluxo → saídas.</summary>
+internal static class DeviceEvaluator
 {
     /// <summary>Limite de iterações somadas de todos os 'para cada' (proteção contra laços enormes).</summary>
     public const int MaxIterations = 100_000;
 
-    public static DeviceInstance Evaluate(DeviceDefinition definition, IReadOnlyDictionary<string, object>? input)
+    public static DeviceInstance Evaluate(DeviceDefinition definition, IReadOnlyDictionary<string, object>? input, string? edited = null)
     {
         var functions = FunctionRegistry.Default;
         var parameters = ResolveParameters(definition, input);
 
         var globals = new Dictionary<string, object>(parameters, StringComparer.Ordinal);
-        var globalScope = new GlobalScope(globals, functions);
+        var globalScope = new GlobalScope(globals, functions, edited);
         var variables = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (var variable in definition.Variables)
         {
@@ -33,7 +33,7 @@ internal static partial class DeviceEvaluator
         {
             if (!rule.Condition.EvaluateBool(globalScope, "a condição da validação"))
             {
-                var message = Interpolate(rule.Message, globalScope);
+                var message = rule.Message.Render(globalScope);
                 if (rule.Level == ValidationLevel.Aviso)
                 {
                     warnings.Add(message);
@@ -45,7 +45,13 @@ internal static partial class DeviceEvaluator
             }
         }
 
-        var scope = new FlowScope(globals, functions);
+        var code = definition.CodeTemplate?.Render(new GlobalScope(new Dictionary<string, object>(globals, StringComparer.Ordinal)
+        {
+            ["familia"] = definition.Family ?? "",
+            ["subtipo"] = definition.Subtype ?? "",
+        }, functions, edited));
+
+        var scope = new FlowScope(globals, functions, edited);
         var iterations = 0;
         Execute(definition.Flow, scope, ref iterations);
 
@@ -72,10 +78,14 @@ internal static partial class DeviceEvaluator
             hydraulics,
             new NamedList<Quantity>(quantities),
             grips,
-            warnings);
+            warnings,
+            code,
+            scope.Log);
     }
 
-    private static Dictionary<string, object> ResolveParameters(DeviceDefinition definition, IReadOnlyDictionary<string, object>? input)
+    /// <summary>Valores informados (ou o padrão), convertidos e validados. Com <c>predefinicoes</c>, um
+    /// código diferente de "generico" manda nas dimensões que ele preenche.</summary>
+    internal static Dictionary<string, object> ResolveParameters(DeviceDefinition definition, IReadOnlyDictionary<string, object>? input)
     {
         if (input is not null)
         {
@@ -95,6 +105,14 @@ internal static partial class DeviceEvaluator
                 : parameter.Default;
         }
 
+        if (definition.Presets is { } presets && result[presets.Parameter] is string code && presets.ValuesOf(code) is { } preset)
+        {
+            foreach (var (name, value) in preset)
+            {
+                result[name] = value;
+            }
+        }
+
         return result;
     }
 
@@ -112,6 +130,12 @@ internal static partial class DeviceEvaluator
                     break;
                 case IfStatement branch:
                     Execute(branch.Condition.EvaluateBool(scope, "a condição de 'se'") ? branch.Then : branch.Else, scope, ref iterations);
+                    break;
+                case ChooseStatement choose:
+                    Execute(Choose(choose, scope), scope, ref iterations);
+                    break;
+                case MessageStatement message:
+                    scope.Log.Add(message.Text.Render(scope));
                     break;
                 case ForEachStatement loop:
                     var source = loop.Source.Evaluate(scope);
@@ -146,6 +170,28 @@ internal static partial class DeviceEvaluator
                     break;
             }
         }
+    }
+
+    private static IReadOnlyList<Statement> Choose(ChooseStatement choose, FlowScope scope)
+    {
+        var value = choose.Value.Evaluate(scope);
+        foreach (var (key, body) in choose.Cases)
+        {
+            var match = (key, value) switch
+            {
+                (double a, double b) => Values.NearlyEqual(a, b),
+                (string a, string b) => a == b,
+                _ => false,
+            };
+            if (match)
+            {
+                return body;
+            }
+        }
+
+        return choose.Default ?? throw new EvaluationException(
+            $"'escolha': nenhum caso para o valor '{Values.Format(value)}' e não há 'padrao' (casos: {string.Join(", ", choose.Cases.Select(c => Values.Format(c.Key)))})",
+            choose.Value.Location, choose.Field);
     }
 
     private static IEnumerable<NamedSolid> EvaluateSolids(OutputsDef outputs, FlowScope scope)
@@ -233,12 +279,4 @@ internal static partial class DeviceEvaluator
             ? v
             : throw new EvaluationException($"{what} deve ser [x, y, z], mas é {Values.TypeName(value)}", expression.Location, expression.Field);
     }
-
-    /// <summary>Substitui <c>{nome}</c> pelo valor do parâmetro/variável.</summary>
-    private static string Interpolate(string message, IEvaluationContext scope) =>
-        PlaceholderRegex().Replace(message, m =>
-            scope.TryGetValue(m.Groups[1].Value, out var value) ? Values.Format(value) : m.Value);
-
-    [GeneratedRegex(@"\{([\p{L}_][\p{L}\p{Nd}_]*)\}")]
-    private static partial Regex PlaceholderRegex();
 }

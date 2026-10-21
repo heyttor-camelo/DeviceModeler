@@ -2,6 +2,7 @@ using Modeler.Core.Csg;
 using Modeler.Core.Definition;
 using Modeler.Core.Errors;
 using Modeler.Core.Expressions;
+using Modeler.Core.Flow;
 
 namespace Modeler.Core.Editing;
 
@@ -39,6 +40,111 @@ public static class DeviceEditing
         }
 
         return parameter.Type == ParameterType.Inteiro ? Math.Round(value) : value;
+    }
+
+    /// <summary>Edita um parâmetro como a paleta ou o grip fariam, antes da avaliação:
+    /// <list type="number">
+    /// <item>converte e valida o valor;</item>
+    /// <item>com <c>predefinicoes</c>: escolher um código aplica as dimensões dele; editar uma dimensão
+    /// que o código preenche muda o código para "generico" (ou desfaz a edição, no modo
+    /// <c>reaplicar</c>);</item>
+    /// <item>roda as regras de <c>ao_editar</c> do parâmetro editado (com <c>editado()</c> valendo o
+    /// nome dele).</item>
+    /// </list>
+    /// O <c>fluxo</c> continua sem efeitos colaterais: tudo acontece aqui, nos valores de entrada.</summary>
+    /// <param name="messages">o que mudou além do parâmetro editado.</param>
+    public static Dictionary<string, object> Edit(DeviceDefinition definition, IReadOnlyDictionary<string, object> current, string parameter, object? value,
+        out List<string> messages)
+    {
+        messages = new List<string>();
+        var edited = definition.FindParameter(parameter)
+                     ?? throw new ParameterValidationException(parameter, $"parâmetro desconhecido em '{definition.Id}'");
+        var values = DeviceEvaluator.ResolveParameters(definition, current);
+        values[parameter] = edited.Coerce(value);
+
+        if (definition.Presets is { } presets)
+        {
+            if (parameter == presets.Parameter)
+            {
+                if (presets.ValuesOf((string)values[parameter]) is { } preset)
+                {
+                    foreach (var (name, v) in preset)
+                    {
+                        values[name] = v;
+                    }
+                }
+            }
+            else
+            {
+                KeepPreset(presets, values, parameter, messages);
+            }
+        }
+
+        foreach (var rule in definition.EditRules.Where(r => r.Parameter == parameter))
+        {
+            var context = new EditContext(values, parameter);
+            var results = rule.Assignments.Select(a => (a.Target, Value: a.Value.Evaluate(context))).ToList();
+            foreach (var (target, result) in results)
+            {
+                var targetDef = definition.FindParameter(target)!;
+                var coerced = targetDef.Coerce(result);
+                if (!SameValue(values[target], coerced))
+                {
+                    values[target] = coerced;
+                    messages.Add($"{target} = {Values.Format(coerced)} (recalculado ao editar {parameter})");
+                    if (definition.Presets is { } p && target != p.Parameter)
+                    {
+                        KeepPreset(p, values, target, messages);
+                    }
+                }
+            }
+        }
+
+        return values;
+    }
+
+    /// <summary>Uma dimensão do código foi alterada: muda o código para "generico" ou desfaz a alteração.</summary>
+    private static void KeepPreset(PresetsDef presets, Dictionary<string, object> values, string changed, List<string> messages)
+    {
+        if (values[presets.Parameter] is not string code || presets.ValuesOf(code) is not { } preset ||
+            !preset.TryGetValue(changed, out var fixedValue) || SameValue(fixedValue, values[changed]))
+        {
+            return;
+        }
+
+        if (presets.Mode == PresetEditMode.Reaplicar)
+        {
+            values[changed] = fixedValue;
+            messages.Add($"{changed} é fixado pelo código {code} ({Values.Format(fixedValue)}); escolha 'generico' para editar");
+        }
+        else
+        {
+            values[presets.Parameter] = PresetsDef.Generic;
+            messages.Add($"{presets.Parameter}: {code} → {PresetsDef.Generic} ({changed} editado)");
+        }
+    }
+
+    private static bool SameValue(object a, object b) => (a, b) switch
+    {
+        (double x, double y) => Values.NearlyEqual(x, y),
+        _ => Equals(a, b),
+    };
+
+    private sealed class EditContext : IEvaluationContext
+    {
+        private readonly IReadOnlyDictionary<string, object> _values;
+
+        public EditContext(IReadOnlyDictionary<string, object> values, string edited)
+        {
+            _values = values;
+            Edited = edited;
+        }
+
+        public FunctionRegistry Functions => FunctionRegistry.Default;
+
+        public string? Edited { get; }
+
+        public bool TryGetValue(string name, out object value) => _values.TryGetValue(name, out value!);
     }
 
     /// <summary>Ajusta valores gravados a uma definição (possivelmente mais nova): descarta parâmetros

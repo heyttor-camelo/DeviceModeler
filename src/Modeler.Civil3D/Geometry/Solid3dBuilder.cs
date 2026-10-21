@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Modeler.Core.Csg;
@@ -102,6 +103,106 @@ internal sealed class Solid3dBuilder : ICsgVisitor<Solid3d?>
         }
 
         return first;
+    }
+
+    public Solid3d? VisitExtrude(ExtrudeNode node)
+    {
+        var curves = new DBObjectCollection();
+        try
+        {
+            var profile = node.Profile;
+            for (var s = 0; s < profile.SegmentCount; s++)
+            {
+                var a = ToPoint(profile.Vertices[s]);
+                var b = ToPoint(profile.Vertices[(s + 1) % profile.Vertices.Count]);
+                curves.Add(Math.Abs(profile.Bulge(s)) < 1e-12
+                    ? new Line(a, b)
+                    : Curve.CreateFromGeCurve(new CircularArc3d(a, ToPoint(profile.ArcMidpoint(s)), b)));
+            }
+
+            var regions = Region.CreateFromCurves(curves);
+            if (regions.Count == 0)
+            {
+                throw new InvalidOperationException("extrudar: o perfil não forma uma região fechada (verifique se os vértices são coplanares e se o perfil não se cruza)");
+            }
+
+            using var region = (Region)regions[0];
+            for (var i = 1; i < regions.Count; i++)
+            {
+                regions[i].Dispose();
+            }
+
+            var solid = new Solid3d();
+            solid.CreateExtrudedSolid(region, ToVector(node.Vector), new SweepOptions());
+            return solid;
+        }
+        catch (Autodesk.AutoCAD.Runtime.Exception ex)
+        {
+            throw new InvalidOperationException($"falha em 'extrudar' no modelador de sólidos ({ex.ErrorStatus}): verifique o perfil (fechado, plano, sem autointerseção).", ex);
+        }
+        finally
+        {
+            foreach (DBObject curve in curves)
+            {
+                curve.Dispose();
+            }
+        }
+    }
+
+    /// <summary>Corta pelo plano e fica com a parte do lado da normal. O lado é conferido pelo
+    /// centroide (a API não documenta com clareza qual metade fica no sólido original).</summary>
+    public Solid3d? VisitCut(CutNode node)
+    {
+        var solid = node.Child.Accept(this);
+        if (solid is null)
+        {
+            return null;
+        }
+
+        var plane = new Autodesk.AutoCAD.Geometry.Plane(ToPoint(node.Plane.Origin), ToVector(node.Plane.Normal));
+        var extents = solid.GeometricExtents;
+        var distances = Corners(extents).Select(p => node.Plane.SignedDistance(ToVec3(p))).ToList();
+        if (distances.All(d => d >= -1e-9))
+        {
+            return solid;
+        }
+
+        if (distances.All(d => d <= 1e-9))
+        {
+            return Discard(solid);
+        }
+
+        try
+        {
+            var other = solid.Slice(plane, true);
+            if (node.Plane.SignedDistance(ToVec3(solid.MassProperties.Centroid)) < 0 && other is not null)
+            {
+                solid.Dispose();
+                return other;
+            }
+
+            other?.Dispose();
+            return solid;
+        }
+        catch (Autodesk.AutoCAD.Runtime.Exception)
+        {
+            // o plano corta a caixa envolvente mas não o sólido: o sólido inteiro fica de um lado
+            return node.Plane.SignedDistance(ToVec3(solid.MassProperties.Centroid)) >= 0 ? solid : Discard(solid);
+        }
+    }
+
+    private static IEnumerable<Point3d> Corners(Extents3d e)
+    {
+        foreach (var x in new[] { e.MinPoint.X, e.MaxPoint.X })
+        {
+            foreach (var y in new[] { e.MinPoint.Y, e.MaxPoint.Y })
+            {
+                foreach (var z in new[] { e.MinPoint.Z, e.MaxPoint.Z })
+                {
+                    yield return new Point3d(x, y, z);
+                }
+            }
+        }
     }
 
     private Solid3d? Combine(IReadOnlyList<CsgNode> children, BooleanOperationType operation, string name)

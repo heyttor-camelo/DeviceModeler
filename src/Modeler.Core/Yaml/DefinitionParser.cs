@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Modeler.Core.Definition;
 using Modeler.Core.Errors;
 using Modeler.Core.Expressions;
+using Modeler.Core.Text;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
@@ -19,6 +20,7 @@ internal sealed partial class DefinitionParser
     private readonly string? _file;
     private readonly string[] _lines;
     private readonly FunctionRegistry _functions = FunctionRegistry.Default;
+    private List<ParameterDef> _parameters = new();
 
     private DefinitionParser(string text, string? file)
     {
@@ -62,7 +64,8 @@ internal sealed partial class DefinitionParser
 
         var root = Map(stream.Documents[0].RootNode, "(raiz)");
         var fields = Fields(root, "", "dispositivo", "nome", "versao", "categoria", "descricao",
-            "parametros", "variaveis", "validacoes", "fluxo", "saidas");
+            "familia", "subtipo", "codigo", "modelos", "parametros", "predefinicoes", "ao_editar",
+            "variaveis", "validacoes", "fluxo", "saidas");
 
         var definition = new DeviceDefinition
         {
@@ -70,6 +73,8 @@ internal sealed partial class DefinitionParser
             Name = OptionalText(fields, "nome", ""),
             Version = RequiredText(root, fields, "versao", ""),
             Description = OptionalText(fields, "descricao", ""),
+            Family = OptionalText(fields, "familia", ""),
+            Subtype = OptionalText(fields, "subtipo", ""),
         };
         if (!IdentifierRegex().IsMatch(definition.Id))
         {
@@ -87,6 +92,9 @@ internal sealed partial class DefinitionParser
 
         var parameters = fields.TryGetValue("parametros", out var p) ? ParseParameters(p) : new List<ParameterDef>();
         definition.Parameters = parameters;
+        _parameters = parameters;
+        definition.Presets = fields.TryGetValue("predefinicoes", out var presets) ? ParsePresets(presets, parameters) : null;
+        definition.EditRules = fields.TryGetValue("ao_editar", out var rules) ? ParseEditRules(rules, parameters) : new List<EditRuleDef>();
 
         var globals = new HashSet<string>(parameters.Select(x => x.Name), StringComparer.Ordinal);
         definition.Variables = fields.TryGetValue("variaveis", out var v) ? ParseVariables(v, globals) : new List<VariableDef>();
@@ -101,6 +109,11 @@ internal sealed partial class DefinitionParser
         }
 
         definition.Validations = fields.TryGetValue("validacoes", out var r) ? ParseValidations(r, globals) : new List<ValidationDef>();
+        if (fields.TryGetValue("codigo", out var codeNode))
+        {
+            definition.CodeTemplate = Tmpl(codeNode, "codigo");
+            CheckTemplate(definition.CodeTemplate, new HashSet<string>(globals.Append("familia").Append("subtipo"), StringComparer.Ordinal));
+        }
 
         var known = new HashSet<string>(globals, StringComparer.Ordinal);
         definition.Flow = fields.TryGetValue("fluxo", out var f)
@@ -108,7 +121,137 @@ internal sealed partial class DefinitionParser
             : new List<Statement>();
 
         definition.Outputs = fields.TryGetValue("saidas", out var o) ? ParseOutputs(o, known) : new OutputsDef();
+        if (fields.TryGetValue("modelos", out var templatesNode))
+        {
+            var visible = new HashSet<string>(globals.Concat(definition.Outputs.Quantities.Select(q => q.Name)).Concat(Results.DeviceInstance.TemplateNames), StringComparer.Ordinal);
+            var t = Fields(Map(templatesNode, "modelos"), "modelos", "nome", "dica");
+            definition.Templates = new TemplatesDef(
+                t.TryGetValue("nome", out var nameNode) ? CheckTemplate(Tmpl(nameNode, "modelos.nome"), visible) : null,
+                t.TryGetValue("dica", out var tipNode) ? CheckTemplate(Tmpl(tipNode, "modelos.dica"), visible) : null);
+        }
+
         return definition;
+    }
+
+    // ------------------------------------------------------------------ predefinições e ao_editar
+
+    private PresetsDef ParsePresets(YamlNode node, List<ParameterDef> parameters)
+    {
+        var map = Map(node, "predefinicoes");
+        var fields = Fields(map, "predefinicoes", "parametro", "ao_editar_dimensao", "comuns", "itens");
+        var name = RequiredText(map, fields, "parametro", "predefinicoes");
+        var parameter = parameters.FirstOrDefault(x => x.Name == name)
+                        ?? throw new DefinitionException($"parâmetro '{name}' não existe{Suggestion(name, parameters.Select(x => x.Name))}", Loc(fields["parametro"]), "predefinicoes.parametro");
+        if (parameter.Type != ParameterType.Texto)
+        {
+            throw new DefinitionException($"o parâmetro do código ('{name}') deve ser do tipo texto", Loc(fields["parametro"]), "predefinicoes.parametro");
+        }
+
+        if (parameter.AllowedValues is not null)
+        {
+            throw new DefinitionException($"não declare 'valores' em '{name}': a lista é \"generico\" mais os códigos de 'predefinicoes.itens'",
+                Loc(fields["parametro"]), "predefinicoes.parametro");
+        }
+
+        var mode = fields.TryGetValue("ao_editar_dimensao", out var modeNode)
+            ? Normalize(Scalar(modeNode, "predefinicoes.ao_editar_dimensao")) switch
+            {
+                "generico" => PresetEditMode.Generico,
+                "reaplicar" => PresetEditMode.Reaplicar,
+                var other => throw new DefinitionException($"'{other}' inválido; use generico ou reaplicar", Loc(modeNode), "predefinicoes.ao_editar_dimensao"),
+            }
+            : PresetEditMode.Generico;
+
+        IReadOnlyDictionary<string, object> ReadValues(YamlNode valuesNode, string field)
+        {
+            var result = new Dictionary<string, object>(StringComparer.Ordinal);
+            foreach (var (key, keyNode, valueNode) in Entries(Map(valuesNode, field)))
+            {
+                var target = parameters.FirstOrDefault(x => x.Name == key)
+                             ?? throw new DefinitionException($"parâmetro '{key}' não existe{Suggestion(key, parameters.Select(x => x.Name))}", Loc(keyNode), $"{field}.{key}");
+                if (target == parameter || target.Type == ParameterType.Conexoes)
+                {
+                    throw new DefinitionException($"'{key}' não pode ser preenchido por um código", Loc(keyNode), $"{field}.{key}");
+                }
+
+                object raw = target.IsNumeric ? Number(valueNode, $"{field}.{key}") : Scalar(valueNode, $"{field}.{key}");
+                try
+                {
+                    result[key] = target.Coerce(raw);
+                }
+                catch (ParameterValidationException ex)
+                {
+                    throw new DefinitionException(ex.Reason, Loc(valueNode), $"{field}.{key}", ex);
+                }
+            }
+
+            return result;
+        }
+
+        var common = fields.TryGetValue("comuns", out var commonNode) ? ReadValues(commonNode, "predefinicoes.comuns") : new Dictionary<string, object>();
+        var itemsNode = fields.GetValueOrDefault("itens") ?? throw Missing(map, "itens", "predefinicoes");
+        var items = new List<(string, IReadOnlyDictionary<string, object>)>();
+        foreach (var (code, keyNode, valueNode) in Entries(Map(itemsNode, "predefinicoes.itens")))
+        {
+            if (Normalize(code) == PresetsDef.Generic)
+            {
+                throw new DefinitionException("'generico' é reservado (é o código das dimensões livres)", Loc(keyNode), "predefinicoes.itens");
+            }
+
+            items.Add((code, ReadValues(valueNode, $"predefinicoes.itens.{code}")));
+        }
+
+        if (items.Count == 0)
+        {
+            throw new DefinitionException("nenhum código em 'itens'", Loc(itemsNode), "predefinicoes.itens");
+        }
+
+        parameter.AllowedValues = items.Select(i => (object)i.Item1).Prepend(PresetsDef.Generic).ToList();
+        if (!parameter.AllowedValues.Contains(parameter.Default))
+        {
+            throw new DefinitionException($"valor padrão '{parameter.Default}' não é um código: use generico ou {string.Join(", ", items.Select(i => i.Item1))}",
+                parameter.Location, $"parametros.{name}.padrao");
+        }
+
+        return new PresetsDef(name, mode, common, items);
+    }
+
+    private List<EditRuleDef> ParseEditRules(YamlNode node, List<ParameterDef> parameters)
+    {
+        var names = new HashSet<string>(parameters.Select(x => x.Name), StringComparer.Ordinal);
+        var result = new List<EditRuleDef>();
+        foreach (var (edited, keyNode, valueNode) in Entries(Map(node, "ao_editar")))
+        {
+            var field = $"ao_editar.{edited}";
+            if (!names.Contains(edited))
+            {
+                throw new DefinitionException($"parâmetro '{edited}' não existe{Suggestion(edited, names)}", Loc(keyNode), field);
+            }
+
+            var assignments = new List<(string, Expression)>();
+            foreach (var (target, targetNode, expressionNode) in Entries(Map(valueNode, field)))
+            {
+                var parameter = parameters.FirstOrDefault(x => x.Name == target)
+                                ?? throw new DefinitionException($"parâmetro '{target}' não existe{Suggestion(target, names)}", Loc(targetNode), $"{field}.{target}");
+                if (target == edited)
+                {
+                    throw new DefinitionException($"a regra de '{edited}' não pode reescrever o próprio '{edited}'", Loc(targetNode), $"{field}.{target}");
+                }
+
+                if (parameter.Type == ParameterType.Conexoes)
+                {
+                    throw new DefinitionException($"'{target}' (conexões) não pode ser recalculado por ao_editar", Loc(targetNode), $"{field}.{target}");
+                }
+
+                var expression = Expr(expressionNode, $"{field}.{target}");
+                CheckNames(expression, names);
+                assignments.Add((target, expression));
+            }
+
+            result.Add(new EditRuleDef(edited, assignments, Loc(keyNode)));
+        }
+
+        return result;
     }
 
     // ------------------------------------------------------------------ parâmetros
@@ -385,7 +528,8 @@ internal sealed partial class DefinitionParser
             var fields = Fields(map, field, "condicao", "mensagem", "nivel");
             var condition = Expr(fields.GetValueOrDefault("condicao") ?? throw Missing(map, "condicao", field), field + ".condicao");
             CheckNames(condition, globals);
-            var message = RequiredText(map, fields, "mensagem", field);
+            RequiredText(map, fields, "mensagem", field);
+            var message = CheckTemplate(Tmpl(fields["mensagem"], field + ".mensagem"), globals);
             var level = fields.TryGetValue("nivel", out var levelNode)
                 ? Normalize(Scalar(levelNode, field + ".nivel")) switch
                 {
@@ -470,6 +614,17 @@ internal sealed partial class DefinitionParser
             return new IfStatement(condition, then, otherwise, Loc(map), field);
         }
 
+        if (keys.Contains("escolha"))
+        {
+            return ParseChoose(map, field, globals, known);
+        }
+
+        if (keys.Contains("mensagem"))
+        {
+            var fields = Fields(map, field, normalizedKeys: true, "mensagem");
+            return new MessageStatement(CheckTemplate(Tmpl(fields["mensagem"], field + ".mensagem"), known), Loc(map), field);
+        }
+
         if (keys.Contains("para cada") || keys.Contains("para_cada"))
         {
             var fields = Fields(map, field, normalizedKeys: true, "para cada", "para_cada", "faca");
@@ -500,8 +655,62 @@ internal sealed partial class DefinitionParser
             return new ForEachStatement(variable, source, body, Loc(map), field);
         }
 
-        throw new DefinitionException("bloco desconhecido: esperado 'se' (com 'entao'/'senao') ou 'para cada' (com 'faca')", Loc(map), field);
+        throw new DefinitionException("bloco desconhecido: esperado 'se' (com 'entao'/'senao'), 'escolha' (com 'casos'), 'para cada' (com 'faca') ou 'mensagem'", Loc(map), field);
     }
+
+    /// <summary><c>escolha: valor</c> + <c>casos</c> + <c>padrao</c>. Se o valor é um parâmetro com
+    /// <c>valores</c>, as chaves são conferidas contra a lista e, sem <c>padrao</c>, todos os valores
+    /// precisam de caso.</summary>
+    private Statement ParseChoose(YamlMappingNode map, string field, HashSet<string> globals, HashSet<string> known)
+    {
+        var fields = Fields(map, field, normalizedKeys: true, "escolha", "casos", "padrao");
+        var value = Expr(fields["escolha"], field + ".escolha");
+        CheckNames(value, known);
+        var parameter = value.Root is IdentifierNode id ? _parameters.FirstOrDefault(p => p.Name == id.Name) : null;
+        var allowed = parameter?.AllowedValues;
+        var casesNode = fields.GetValueOrDefault("casos") ?? throw Missing(map, "casos", field);
+        var cases = new List<(object, IReadOnlyList<Statement>)>();
+        foreach (var (keyText, keyNode, bodyNode) in Entries(Map(casesNode, field + ".casos")))
+        {
+            object key = parameter?.IsNumeric == true || (parameter is null && double.TryParse(keyText, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+                ? Number(keyNode, $"{field}.casos")
+                : keyText;
+            if (allowed is not null && !allowed.Any(a => SameKey(a, key)))
+            {
+                throw new DefinitionException(
+                    $"caso '{keyText}' não está nos valores de '{parameter!.Name}' ({string.Join(", ", allowed.Select(Values.Format))}){Suggestion(keyText, allowed.Select(Values.Format))}",
+                    Loc(keyNode), $"{field}.casos.{keyText}");
+            }
+
+            if (cases.Any(c => SameKey(c.Item1, key)))
+            {
+                throw new DefinitionException($"caso '{keyText}' repetido", Loc(keyNode), $"{field}.casos");
+            }
+
+            cases.Add((key, ParseStatements(Sequence(bodyNode, $"{field}.casos.{keyText}"), $"{field}.casos.{keyText}", globals, known)));
+        }
+
+        var otherwise = fields.TryGetValue("padrao", out var defaultNode)
+            ? ParseStatements(Sequence(defaultNode, field + ".padrao"), field + ".padrao", globals, known)
+            : null;
+        if (otherwise is null && allowed is not null)
+        {
+            var missing = allowed.Where(a => !cases.Any(c => SameKey(c.Item1, a))).Select(Values.Format).ToList();
+            if (missing.Count > 0)
+            {
+                throw new DefinitionException($"faltam casos para {string.Join(", ", missing)} (ou declare 'padrao')", Loc(map), field);
+            }
+        }
+
+        return new ChooseStatement(value, cases, otherwise, Loc(map), field);
+    }
+
+    private static bool SameKey(object a, object b) => (a, b) switch
+    {
+        (double x, double y) => Values.NearlyEqual(x, y),
+        (string x, string y) => x == y,
+        _ => false,
+    };
 
     // ------------------------------------------------------------------ saídas
 
@@ -642,7 +851,7 @@ internal sealed partial class DefinitionParser
             case CallNode call:
                 if (!_functions.Contains(call.Name))
                 {
-                    var names = _functions.Names.Append("se");
+                    var names = _functions.Names.Concat(new[] { "se", "existe", "ou" });
                     throw new DefinitionException($"função desconhecida '{call.Name}'{Suggestion(call.Name, names)}",
                         expression.LocationAt(call.Position), expression.Field);
                 }
@@ -754,6 +963,34 @@ internal sealed partial class DefinitionParser
         }
 
         return Expression.Parse(text[offset..], location, field, shift + offset);
+    }
+
+    /// <summary>Modelo de texto (<c>{expressão:formato}</c>) com a posição no arquivo.</summary>
+    private Template Tmpl(YamlNode node, string field)
+    {
+        if (node is not YamlScalarNode scalar)
+        {
+            throw new DefinitionException("esperado um texto", Loc(node), field);
+        }
+
+        var location = Loc(node);
+        var shift = scalar.Style is ScalarStyle.SingleQuoted or ScalarStyle.DoubleQuoted ? 1 : 0;
+        if (scalar.Style is ScalarStyle.Literal or ScalarStyle.Folded)
+        {
+            location = BlockScalarStart(location);
+        }
+
+        return Template.Parse(scalar.Value ?? "", location, field, shift);
+    }
+
+    private Template CheckTemplate(Template template, HashSet<string> known)
+    {
+        foreach (var expression in template.Expressions)
+        {
+            CheckNames(expression, known);
+        }
+
+        return template;
     }
 
     /// <summary>Em escalares de bloco (| ou >) o conteúdo começa na linha seguinte, após a indentação.</summary>

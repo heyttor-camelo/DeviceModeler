@@ -10,11 +10,13 @@ public static class Values
 {
     public static string TypeName(object? value) => value switch
     {
-        null => "nulo",
+        null or NullValue => "nulo",
         double => "número",
         bool => "lógico",
         string => "texto",
         CsgNode => "sólido",
+        Profile => "perfil",
+        Plane => "plano",
         IReadOnlyDictionary<string, object> => "registro",
         IReadOnlyList<object> => "lista",
         _ => value.GetType().Name,
@@ -22,11 +24,13 @@ public static class Values
 
     public static string Format(object? value) => value switch
     {
-        null => "nulo",
+        null or NullValue => "nulo",
         double d => FormatNumber(d),
         bool b => b ? "verdadeiro" : "falso",
         string s => s,
         CsgNode n => n.GetType().Name,
+        Profile p => $"perfil({p.Vertices.Count} vértices{(p.Closed ? ", fechado" : "")})",
+        Plane p => $"plano({p.Origin}, {p.Normal})",
         IReadOnlyDictionary<string, object> r => "{" + string.Join(", ", r.Select(kv => kv.Key + ": " + Format(kv.Value))) + "}",
         IReadOnlyList<object> l => "[" + string.Join(", ", l.Select(Format)) + "]",
         _ => value.ToString() ?? "",
@@ -52,6 +56,18 @@ public static class Values
 
     public static IReadOnlyList<object> FromVec3(Vec3 v) => new object[] { v.X, v.Y, v.Z };
 
+    /// <summary>Ponto [x, y] (z = <paramref name="z"/>) ou [x, y, z].</summary>
+    public static bool TryToPoint(object? value, double z, out Vec3 point)
+    {
+        if (value is IReadOnlyList<object> { Count: 2 } list && list[0] is double x && list[1] is double y)
+        {
+            point = new Vec3(x, y, z);
+            return true;
+        }
+
+        return TryToVec3(value, out point);
+    }
+
     /// <summary>Converte números .NET (int, float, decimal...) para double; demais valores passam direto.</summary>
     public static object? Normalize(object? value) => value switch
     {
@@ -59,4 +75,16 @@ public static class Values
         int or long or short or byte or float or decimal or uint or ulong or ushort or sbyte => Convert.ToDouble(value, CultureInfo.InvariantCulture),
         _ => value,
     };
+}
+
+/// <summary>O valor <c>nulo</c>: ausência de valor (não confundir com zero ou texto vazio).</summary>
+public sealed class NullValue
+{
+    public static readonly NullValue Instance = new();
+
+    private NullValue()
+    {
+    }
+
+    public override string ToString() => "nulo";
 }

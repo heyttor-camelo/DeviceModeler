@@ -17,6 +17,7 @@ public static class Evaluator
         NumberNode n => n.Value,
         StringNode s => s.Value,
         BoolNode b => b.Value,
+        NullNode => NullValue.Instance,
         ListNode l => l.Items.Select(i => Evaluate(i, context)).ToList(),
         IdentifierNode id => Lookup(id, context),
         MemberNode m => Member(m, context),
@@ -59,7 +60,9 @@ public static class Evaluator
                 return record.TryGetValue(node.Member, out var value)
                     ? value
                     : throw new ExpressionException(
-                        $"campo '{node.Member}' não existe; campos disponíveis: {string.Join(", ", record.Keys)}", node.Position);
+                        $"campo '{node.Member}' não existe; campos disponíveis: {string.Join(", ", record.Keys)}", node.Position, missing: true);
+            case NullValue:
+                throw new ExpressionException($"'.{node.Member}' de um valor nulo (use existe() ou ou())", node.Position, missing: true);
             case IReadOnlyList<object> { Count: 3 } point when node.Member is "x" or "y" or "z":
                 return point[node.Member[0] - 'x'];
             default:
@@ -78,7 +81,7 @@ public static class Evaluator
         var index = ToInteger(Evaluate(node.Index, context), node.Index.Position, "índice");
         if (index < 0 || index >= list.Count)
         {
-            throw new ExpressionException($"índice {index} fora da lista (tamanho {list.Count})", node.Index.Position);
+            throw new ExpressionException($"índice {index} fora da lista (tamanho {list.Count})", node.Index.Position, missing: true);
         }
 
         return list[index];
@@ -118,6 +121,23 @@ public static class Evaluator
                 return Values.Format(left) + Values.Format(right);
         }
 
+        // pontos e vetores [x, y, z]: soma, diferença e escala
+        if (Values.TryToVec3(left, out var va) && Values.TryToVec3(right, out var vb) && node.Operator is "+" or "-")
+        {
+            return Values.FromVec3(node.Operator == "+" ? va + vb : va - vb);
+        }
+
+        if (node.Operator is "*" or "/" && (Values.TryToVec3(left, out var vector) ? right is double : Values.TryToVec3(right, out vector) && left is double && node.Operator == "*"))
+        {
+            var k = left as double? ?? (double)right;
+            if (node.Operator == "/" && k == 0)
+            {
+                throw new ExpressionException("divisão por zero", node.Position);
+            }
+
+            return Values.FromVec3(vector * (node.Operator == "*" ? k : 1 / k));
+        }
+
         var a = Number(left, node.Left.Position, $"operando de '{node.Operator}'");
         var b = Number(right, node.Right.Position, $"operando de '{node.Operator}'");
         return node.Operator switch
@@ -138,6 +158,8 @@ public static class Evaluator
 
     private static bool AreEqual(object left, object right, BinaryNode node) => (left, right) switch
     {
+        (NullValue, NullValue) => true,
+        (NullValue, _) or (_, NullValue) => false,
         (double a, double b) => Values.NearlyEqual(a, b),
         (string a, string b) => string.Equals(a, b, StringComparison.Ordinal),
         (bool a, bool b) => a == b,
@@ -159,6 +181,36 @@ public static class Evaluator
             return Evaluate(node.Arguments[condition ? 1 : 2].Value, context);
         }
 
+        // existe(x) e ou(x, padrao) também são preguiçosas: só absorvem a falta de valor
+        // (nulo, campo ausente, índice fora da lista); qualquer outro erro continua sendo erro.
+        if (node.Name is "existe" or "exists")
+        {
+            if (node.Arguments.Count != 1 || node.Arguments[0].Name is not null)
+            {
+                throw new ExpressionException("existe(valor) exige 1 argumento posicional", node.Position);
+            }
+
+            return TryValue(node.Arguments[0].Value, context, out _);
+        }
+
+        if (node.Name is "ou" or "coalesce")
+        {
+            if (node.Arguments.Count < 2 || node.Arguments.Any(a => a.Name is not null))
+            {
+                throw new ExpressionException("ou(valor, alternativa, ...) exige ao menos 2 argumentos posicionais", node.Position);
+            }
+
+            for (var i = 0; i < node.Arguments.Count - 1; i++)
+            {
+                if (TryValue(node.Arguments[i].Value, context, out var value))
+                {
+                    return value;
+                }
+            }
+
+            return Evaluate(node.Arguments[^1].Value, context);
+        }
+
         if (!context.Functions.TryGet(node.Name, out var function))
         {
             throw new ExpressionException($"função desconhecida '{node.Name}'", node.Position);
@@ -172,6 +224,20 @@ public static class Evaluator
         }
 
         return function.Implementation(new FunctionCall(function, values, args, context, node.Position));
+    }
+
+    private static bool TryValue(Node node, IEvaluationContext context, out object value)
+    {
+        try
+        {
+            value = Evaluate(node, context);
+            return value is not NullValue;
+        }
+        catch (ExpressionException ex) when (ex.Missing)
+        {
+            value = NullValue.Instance;
+            return false;
+        }
     }
 
     internal static double Number(object value, int position, string what) =>

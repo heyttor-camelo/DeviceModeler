@@ -113,6 +113,32 @@ public sealed class PlanOutline : ICsgVisitor<bool>
         return true;
     }
 
+    /// <summary>Extrusão vertical: o próprio perfil (pode ser côncavo, como as alas de uma boca);
+    /// inclinada ou horizontal: a envoltória da seção inicial e da final.</summary>
+    public bool VisitExtrude(ExtrudeNode node)
+    {
+        var points = node.Profile.Sample();
+        var vertical = Math.Abs(Affine.Cross(_transform.ApplyVector(node.Vector), Vec3.UnitZ).Length) < 1e-9 * Math.Max(1, node.Vector.Length);
+        if (!vertical || points.Count < 3)
+        {
+            return Add(points.Concat(points.Select(p => p + node.Vector)));
+        }
+
+        if (_parts.Count >= MaxParts)
+        {
+            return false;
+        }
+
+        var world = points.Select(_transform.Apply).ToList();
+        var top = points.Select(p => _transform.Apply(p + node.Vector)).ToList();
+        _parts.Add(new OutlinePart(world.Select(p => (p.X, p.Y)).ToList(), _removed,
+            Math.Min(world.Min(p => p.Z), top.Min(p => p.Z)), Math.Max(world.Max(p => p.Z), top.Max(p => p.Z))));
+        return true;
+    }
+
+    /// <summary>Corte: a planta mostra a peça inteira (prévia, sem resolver o plano).</summary>
+    public bool VisitCut(CutNode node) => node.Child.Accept(this);
+
     private bool With(Affine local, CsgNode child)
     {
         var previous = _transform;

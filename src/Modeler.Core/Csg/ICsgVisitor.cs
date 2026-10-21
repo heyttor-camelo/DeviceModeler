@@ -21,4 +21,8 @@ public interface ICsgVisitor<out T>
     T VisitRotate(RotateNode node);
 
     T VisitArray(ArrayNode node);
+
+    T VisitExtrude(ExtrudeNode node);
+
+    T VisitCut(CutNode node);
 }
