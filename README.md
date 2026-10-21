@@ -18,6 +18,8 @@ DeviceModeler.sln
 Unidades: **metros, m², m³, m³/s**; ângulos de rotação e de conexão em **graus**
 (funções trigonométricas em radianos — use `rad()`/`graus()`).
 
+Outro PC? Veja [docs/SETUP-NOVO-PC.md](docs/SETUP-NOVO-PC.md) (Claude Code, REA, clonar e testar).
+
 ```bash
 dotnet build
 ```

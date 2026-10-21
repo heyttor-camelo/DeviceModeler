@@ -1,0 +1,147 @@
+# CLAUDE.md — contexto do projeto para o Claude Code
+
+Leia isto antes de trabalhar no repositório. Resume o que já foi feito, as decisões tomadas e o
+que falta. A especificação completa da linguagem YAML e dos comandos está no `README.md`.
+
+## O que é
+
+Modelador paramétrico de dispositivos de drenagem para o Civil 3D 2026, em C#: PVs, caixas, bocas
+de bueiro e, no futuro, sarjetas e valetas.
+
+- Cada dispositivo é definido em **YAML**, numa ideia parecida com o `.pkt` do Subassembly Composer.
+- A definição tem parâmetros, variáveis e um `fluxo` que monta uma **árvore CSG abstrata**.
+- As saídas são sólidos, conectores de tubo, nó hidráulico SWMM (junção) e quantitativos.
+- Unidades: m, m², m³ e m³/s; ângulos de rotação e de conexão em graus.
+
+Usuário: Heyttor (engenheiro civil, fala português). Responda em **português**.
+
+## Estrutura
+
+```
+DeviceModeler.sln
+├─ src/Modeler.Core          net8.0, SEM AutoCAD — linguagem, avaliação, CSG, codec, relatórios
+├─ src/Modeler.Civil3D       plugin (net8.0-windows ou net10.0-windows, auto) — comandos DM_*
+├─ tests/Modeler.Core.Tests  xUnit (114 testes) — tudo que não depende do CAD
+├─ catalog/exemplos/         pv_retangular.yaml (caso de teste principal)
+├─ deploy/                   PackageContents.xml do bundle + aviso de terceiros
+├─ dist/DeviceModeler.bundle bundle PRONTO (DLLs versionadas de propósito), gerado por tools/Build-Dist.ps1
+├─ tools/                    Install-Bundle.ps1 (instala em %APPDATA%), Build-Dist.ps1 (regera dist/)
+└─ refs/acad2026/            DLLs da Autodesk copiadas p/ compilar sem Civil 3D — NÃO versionar (gitignore)
+```
+
+## Compilar e testar
+
+```bash
+dotnet build DeviceModeler.sln
+dotnet test
+powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de mudar o plugin
+```
+
+- Só considere uma tarefa pronta com `dotnet build` sem avisos e `dotnet test` verde.
+- O plugin só pode ser verificado de verdade dentro do Civil 3D. O roteiro manual está no README
+  ("Roteiro de teste manual"). Diga claramente o que não foi testado no CAD.
+- **Alvo .NET:** o csproj do plugin lê `acdbmgd.runtimeconfig.json` da instalação usada como
+  referência (`AcadDir`). Se for `net10.0`, compila para `net10.0-windows`; senão, `net8.0-windows`.
+  - Na máquina de origem, o Civil 3D 2026 build 25.1.179 tinha DLLs que exigem .NET 10.
+  - No PC do usuário, o Civil 3D 2026 (AeccDbMgd 13.8.0.1516) **roda em .NET 8.0.13**.
+  - O `dist/` é sempre net8, compilado contra `refs/acad2026` (25.1.60), e carrega nos dois.
+  - Sem `refs/`, `Build-Dist.ps1` usa a instalação local. Num Civil 3D .NET 8 isso também dá net8.
+- `AcadDir` pode ser forçado: `dotnet build -p:AcadDir=C:\caminho`.
+- Saída local: `NETLOAD\` (ignorado pelo git): `Modeler.Civil3D.dll` + `Modeler.Core.dll` +
+  `YamlDotNet.dll` + `catalog\`. **As três DLLs precisam ficar juntas.** Se copiar só a principal,
+  dá `FileNotFoundException: Modeler.Core` (já aconteceu).
+
+## Convenções
+
+- **Mensagens, DSL, comentários e docs em português.** A API C# tem nomes em inglês
+  (`DeviceDefinition.Evaluate`, `inst.Quantities`). No YAML as chaves são em português (`parametros`,
+  `fluxo`, `se/entao/senao`, `para cada`).
+- Erros sempre com local: `arquivo(linha,coluna): campo: motivo` (`ModelerException` e subclasses).
+- Siga o estilo do código vizinho: `sealed`, records para dados, `<summary>` curtos em português e
+  chaves em todos os `if`.
+- **Commits pequenos e descritivos, em português**, terminando com
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Nunca versione DLLs da Autodesk: a licença não permite, e o repositório é **público**
+  (github.com/heyttor-camelo/DeviceModeler). O YamlDotNet (MIT) pode ir no `dist/`.
+- Não copie código de terceiros descompilado (ver "SOLIDOS" abaixo).
+
+## Decisões importantes (não refaça sem conversar)
+
+- **Avaliador de expressões próprio, sem NCalc e sem compilar código.**
+  - `Expressions/`: Lexer → ExpressionParser → Evaluator.
+  - `se()` é preguiçosa; `e`, `ou` e `nao` têm curto-circuito.
+  - A igualdade numérica tem tolerância de 1e-9.
+  - Trigonometria em radianos; `rotacionar`, `polar` e o ângulo das conexões em graus.
+- **Variáveis em ordem de dependência** (`DependencyResolver`), com ciclo virando erro na carga.
+  Nomes e funções desconhecidos são erro na carga, com sugestão ("você quis dizer...").
+- **YAML lido com o RepresentationModel do YamlDotNet**, para guardar linha e coluna; campos
+  desconhecidos são rejeitados.
+- **CSG só com dados** (`Csg/`); o plugin implementa `ICsgVisitor<Solid3d?>` (`Solid3dBuilder`).
+- **Sistema local:** X e Y relativos ao ponto de inserção; **Z = cota absoluta**.
+- **No DWG:**
+  - Hospedeiro: `BlockReference` de um **bloco anônimo exclusivo**, com um `Solid3d` por saída em
+    camadas `DM-<NOME>`.
+  - Dados: Xrecord `DEVICEMODELER` no dicionário de extensão da referência (`DeviceRecord`), com id,
+    versão, hash, caminho do YAML, nome e parâmetros em JSON (código 300, pedaços de 250 caracteres).
+  - Posição e rotação ficam no transform do bloco.
+  - Regeneração: `DeviceEditing.Reconcile`, deslocamento em Z vira soma nas cotas, escala volta a 1,
+    o conteúdo do bloco é apagado e recriado, e um bloco compartilhado por cópia é separado.
+- **Grips:** `GripOverrule` em BlockReference com `SetExtensionDictionaryEntryFilter`. O clique no
+  grip só agenda o comando `DM_GRIP`: **nunca refaça geometria dentro do overrule**.
+- **Tubos (`PipeWatcher`):** `ObjectModified` só enfileira handles; o processamento é no
+  `CommandEnded`, com `LockDocument`, ignorando UNDO/REDO e os próprios DM_*.
+- **Conexões:** `{nome, angulo, cota (geratriz inferior interna), diametro (interno),
+  diametro_externo, ref (handle do tubo)}`. O furo do PV usa `diametro_externo + 0.10`, centrado em
+  `cota + diametro/2`.
+
+## SOLIDOS (referência de arquitetura)
+
+O usuário tem o plugin comercial SOLIDOS (TBN2NET) instalado em
+`%APPDATA%\Autodesk\ApplicationPlugins\SOLIDOS.bundle` e autorizou estudá-lo para se inspirar.
+Use REA ou ILSpy para tirar dúvidas de **mecanismo**, mas escreva o código do zero.
+
+O que se aprendeu:
+
+- Cada dispositivo é um BlockReference com BTR anônimo próprio. Os dados ficam num Xrecord do
+  dicionário de extensão (chave `SOLIDOS_`).
+- Os overrules (Object, Drawable, Grip, Geometry, Transform) são registrados em BlockReference com
+  `SetExtensionDictionaryEntryFilter`.
+- As edições marcam flags de "sujo", que são processadas no commit da transação mais externa. A
+  regeneração apaga o conteúdo do BTR e recria.
+- `DeepClone` dá à cópia um BTR próprio. Entre desenhos (`WblockClone`), o bloco vira um bloco comum.
+- Mudanças em objetos ligados vão para uma fila em `ObjectModified` e são processadas no
+  `CommandEnded`.
+- A superfície entra por `FindElevationAtXY` mais um offset (`SurfAdj`), com hash da superfície para
+  detectar mudança.
+- No SOLIDOS os tubos são dispositivos lineares próprios; nós ligamos tubos da **Pipe Network**.
+- As definições do SOLIDOS são fluxogramas XAML com VB compilado pelo Roslyn. Nós evitamos isso de
+  propósito.
+
+## Estado atual
+
+**Fase 1, concluída:** o Core completo e o `pv_retangular.yaml`.
+- Degraus a cada 0,30 m quando H > 2,0 m, furo e conector por conexão, junção SWMM.
+- Quantitativos: concreto, fôrma, escavação, lastro e degraus.
+
+**Fase 2, implementada:** compila sem avisos, mas **ainda não foi testada no Civil 3D**.
+- Comandos: DM_INSERIR, DM_EDITAR, DM_GRIP, DM_CONECTAR, DM_SUPERFICIE, DM_ATUALIZAR, DM_AUTO,
+  DM_QUANTITATIVOS, DM_SWMM, DM_INFO e DM_CATALOGO.
+- Janela com PropertyGrid e resumo ao vivo, jig de inserção e bundle de autoload.
+
+**Próximos passos (em ordem sugerida):**
+1. Testar a Fase 2 no Civil 3D com o roteiro do README e corrigir o que aparecer.
+2. Opcional: DLL única (Core e YamlDotNet embutidos), para evitar o erro de DLL faltando.
+3. Prévia da geometria durante o arrasto do grip (DrawJig ou transient graphics).
+4. Acompanhamento automático da superfície (guardar o handle da superfície e o hash).
+5. Categoria `linear` (sarjeta, valeta): seção varrida ao longo de alinhamento e perfil.
+6. Catálogo DNIT (álbum IPR 736, 5ª edição com emendas) com presets por código. Editar uma dimensão
+   manualmente muda o código para "genérico" (ideia do SOLIDOS).
+7. Nós SWMM storage e outfall, e exportação de condutos.
+
+## Ferramentas úteis
+
+- **REA** (MCP `rea`, pacote npm `rea-agents`): engenharia reversa. Para .NET ele lista tipos e
+  membros, mas **não descompila IL**. Para o corpo dos métodos, use o ILSpy:
+  `dotnet tool install -g ilspycmd` e depois
+  `ilspycmd -t <Tipo> <dll> -o <pasta-temp>`, sempre fora do repositório.
+- Python pode não estar disponível no Windows. Prefira PowerShell, Bash ou as ferramentas de edição.
