@@ -64,7 +64,7 @@ internal static class Projections
         }
 
         Fill(tr, db, block, device, view, record);
-        projection.UpgradeOpen();
+        projection.Writable();
         // a projeção é desenhada em coordenadas da vista: um MOVE/ROTATE/SCALE nela é desfeito
         projection.Position = Point3d.Origin;
         projection.Rotation = 0;
@@ -82,7 +82,7 @@ internal static class Projections
         {
             alignment.StationOffset(point.X, point.Y, ref station, ref offset);
         }
-        catch (Autodesk.AutoCAD.Runtime.Exception)
+        catch (System.Exception)
         {
             return null;
         }
@@ -146,7 +146,7 @@ internal static class Projections
             {
                 return view.FindXYAtStationAndElevation(station, elevation, ref x, ref y) ? new Point3d(x, y, 0) : null;
             }
-            catch (Autodesk.AutoCAD.Runtime.Exception)
+            catch (System.Exception)
             {
                 return null;
             }
@@ -250,20 +250,40 @@ internal static class Projections
             }
 
             var pieces = new List<List<Point3d>>();
-            foreach (DBObject item in curves)
-            {
-                if (item is Curve curve)
-                {
-                    pieces.Add(Sample(curve));
-                }
-
-                item.Dispose();
-            }
+            Collect(curves, pieces);
 
             loops.AddRange(Chain(pieces));
         }
 
         return loops;
+    }
+
+    /// <summary>Curvas da explosão; uma seção com várias faces separadas explode em regiões, que são
+    /// explodidas de novo.</summary>
+    private static void Collect(DBObjectCollection items, List<List<Point3d>> pieces)
+    {
+        foreach (DBObject item in items)
+        {
+            if (item is Curve curve)
+            {
+                pieces.Add(Sample(curve));
+            }
+            else if (item is Region region)
+            {
+                var inner = new DBObjectCollection();
+                try
+                {
+                    region.Explode(inner);
+                    Collect(inner, pieces);
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception)
+                {
+                    // região que não explode: fica sem corte
+                }
+            }
+
+            item.Dispose();
+        }
     }
 
     private static List<Point3d> Sample(Curve curve)

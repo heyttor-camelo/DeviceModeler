@@ -86,7 +86,7 @@ internal static class CivilLinks
         }
 
         values[parameter.Name] = connections;
-        var inverts = connections.OfType<IReadOnlyDictionary<string, object>>().Select(c => c["cota"]).OfType<double>().ToList();
+        var inverts = connections.OfType<IReadOnlyDictionary<string, object>>().Select(c => c.GetValueOrDefault("cota")).OfType<double>().ToList();
         if (inverts.Count == 0)
         {
             return;

@@ -162,7 +162,7 @@ public sealed class Commands
         HydroPanel.Reveal("DISPOSITIVOS", id.Handle.ToString());
     });
 
-    [CommandMethod("DeviceModeler", "DM_CONECTAR", CommandFlags.Modal)]
+    [CommandMethod("DeviceModeler", "DM_CONECTAR", CommandFlags.Modal | CommandFlags.UsePickSet)]
     public void Connect() => Run(() =>
     {
         var id = PickDevice("\nSelecione o dispositivo: ");
@@ -437,7 +437,7 @@ public sealed class Commands
         {
             action();
         }
-        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or AcException or IOException or ArgumentException)
+        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or AcException or IOException or ArgumentException or Autodesk.Civil.CivilException)
         {
             Infra.HydroLog.Warn("Comandos", ex.Message);
             Ed.WriteMessage($"\nDeviceModeler: {ex.Message}");

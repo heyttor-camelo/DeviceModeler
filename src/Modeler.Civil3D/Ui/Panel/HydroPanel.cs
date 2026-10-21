@@ -167,9 +167,17 @@ internal sealed class HydroPanel : SW.Window, IPanelHost
 
     public void Refresh()
     {
+        // no meio de um comando (jig, prompt) o painel não lê o desenho: tenta de novo quando o
+        // AutoCAD ficar ocioso
+        if (!string.IsNullOrEmpty(Document?.CommandInProgress))
+        {
+            RefreshWhenIdle();
+            return;
+        }
+
         try
         {
-            using (Document?.LockDocument())
+            // só leitura: sem LockDocument (as gravações do painel travam o documento por conta própria)
             {
                 foreach (var category in _categories.Where(c => c.Ready))
                 {
@@ -192,6 +200,34 @@ internal sealed class HydroPanel : SW.Window, IPanelHost
         FillCategories();
         FillCommands();
         FillList();
+    }
+
+    private bool _idleHooked;
+
+    private void RefreshWhenIdle()
+    {
+        if (_idleHooked)
+        {
+            return;
+        }
+
+        _idleHooked = true;
+        void OnIdle(object? sender, EventArgs e)
+        {
+            if (!string.IsNullOrEmpty(Document?.CommandInProgress))
+            {
+                return;
+            }
+
+            AcApp.Idle -= OnIdle;
+            _idleHooked = false;
+            if (_instance == this)
+            {
+                Refresh();
+            }
+        }
+
+        AcApp.Idle += OnIdle;
     }
 
     public void RebuildTabs() => BuildTabs();

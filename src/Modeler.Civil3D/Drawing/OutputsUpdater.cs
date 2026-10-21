@@ -50,7 +50,7 @@ internal static class OutputsUpdater
                 var erased = !record.AllDevices && record.Devices.Count > 0 && record.Devices.All(changes.Erased.Contains);
                 if (erased && record.Kind != OutputKind.Tabela)
                 {
-                    entity.UpgradeOpen();
+                    entity.Writable();
                     entity.Erase();
                     continue;
                 }
@@ -63,7 +63,7 @@ internal static class OutputsUpdater
                     Update(tr, db, entity, record);
                 }
             }
-            catch (Exception ex) when (ex is Autodesk.AutoCAD.Runtime.Exception or InvalidOperationException)
+            catch (Exception ex)
             {
                 HydroLog.Warn("Saídas", $"{entity.Handle}: {ex.Message}");
             }
@@ -93,7 +93,7 @@ internal static class OutputsUpdater
         };
         if (!alive)
         {
-            entity.UpgradeOpen();
+            entity.Writable();
             entity.Erase();
         }
 

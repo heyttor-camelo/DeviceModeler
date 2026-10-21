@@ -70,7 +70,7 @@ internal static class Tables
         }
 
         var columns = Math.Max(1, record.Columns.Count);
-        table.UpgradeOpen();
+        table.Writable();
         table.SuppressRegenerateTable(true);
         try
         {

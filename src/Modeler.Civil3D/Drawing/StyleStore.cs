@@ -96,7 +96,7 @@ internal static class StyleStore
         }
         else
         {
-            dictionary.UpgradeOpen();
+            dictionary.Writable();
             xrecord = new Xrecord();
             dictionary.SetAt(name, xrecord);
             tr.AddNewlyCreatedDBObject(xrecord, true);
@@ -124,7 +124,7 @@ internal static class StyleStore
             return null;
         }
 
-        nod.UpgradeOpen();
+        nod.Writable();
         var dictionary = new DBDictionary();
         nod.SetAt(key, dictionary);
         tr.AddNewlyCreatedDBObject(dictionary, true);

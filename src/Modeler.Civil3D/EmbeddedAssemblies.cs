@@ -9,8 +9,9 @@ namespace Modeler.Civil3D;
 /// <summary>DLL única: <c>Modeler.Core.dll</c> e <c>YamlDotNet.dll</c> vêm embutidos como recursos
 /// <c>Embedded.&lt;nome&gt;.dll</c> (alvo EmbedDependencies do csproj). O inicializador do módulo roda
 /// antes de qualquer outro código desta DLL e registra a resolução, que carrega o recurso no mesmo
-/// contexto de carga do plugin. O recurso embutido sempre tem preferência sobre uma DLL avulsa
-/// que tenha sobrado de uma instalação antiga (versões diferentes quebrariam o plugin).</summary>
+/// contexto de carga do plugin. A resolução só roda quando o .NET não acha a DLL: uma DLL avulsa
+/// antiga que tenha sobrado ao lado do plugin poderia ser carregada antes. Por isso o csproj apaga
+/// esses restos da saída e o Install-Bundle limpa a pasta Contents antes de copiar.</summary>
 internal static class EmbeddedAssemblies
 {
     private static readonly Dictionary<string, Assembly> Loaded = new(StringComparer.OrdinalIgnoreCase);

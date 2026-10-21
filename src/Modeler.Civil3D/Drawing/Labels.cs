@@ -62,7 +62,7 @@ internal static class Labels
             return true;
         }
 
-        leader.UpgradeOpen();
+        leader.Writable();
         var delta = new Vector3d(device.Position.X - record.DevicePosition[0], device.Position.Y - record.DevicePosition[1], 0);
         if (delta.Length > 1e-9)
         {
@@ -93,7 +93,7 @@ internal static class Layers
             return layers[name];
         }
 
-        layers.UpgradeOpen();
+        layers.Writable();
         var layer = new LayerTableRecord { Name = name, Color = Color.FromColorIndex(ColorMethod.ByAci, color) };
         if (linetype is not null && Linetype(tr, db, linetype) is { IsNull: false } id)
         {

@@ -92,7 +92,7 @@ internal sealed class OutputRecord
     {
         if (obj.ExtensionDictionary.IsNull)
         {
-            obj.UpgradeOpen();
+            obj.Writable();
             obj.CreateExtensionDictionary();
         }
 

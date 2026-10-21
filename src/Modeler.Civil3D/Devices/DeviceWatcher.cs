@@ -106,21 +106,9 @@ internal static class DeviceWatcher
         document.Database.ObjectModified += OnObjectModified;
         document.Database.ObjectErased += OnObjectErased;
         document.CommandEnded += OnCommandEnded;
-        document.CommandCancelled += (_, _) => Clear(document.Database, keepGrips: false);
-        document.CommandFailed += (_, _) => Clear(document.Database, keepGrips: false);
-    }
-
-    private static void Clear(Database db, bool keepGrips)
-    {
-        if (Queues.TryGetValue(db, out var pending))
-        {
-            var grips = pending.Grips;
-            Queues.Remove(db);
-            if (keepGrips && grips.Count > 0)
-            {
-                For(db).Grips = grips;
-            }
-        }
+        // comandos que terminam com Esc ou falha já gravaram o que mudaram: a fila é processada igual
+        document.CommandCancelled += OnCommandEnded;
+        document.CommandFailed += OnCommandEnded;
     }
 
     private static void OnObjectModified(object sender, ObjectEventArgs e)
@@ -257,8 +245,18 @@ internal static class DeviceWatcher
                     record.Number = 0;
                     record.Name = DeviceService.NextName(tr, db, definition, names);
                     names.Add(record.Name);
-                    DeviceService.SeparateBlock(tr, reference, definition, record);
-                    HydroLog.Info("Acompanhamento", $"cópia de {original} virou {record.Name} (bloco próprio)");
+                    // a cópia não leva a estrutura nula nem os tubos do original (furos e conectores
+                    // saem; ligue os tubos dela com DM_CONECTAR)
+                    record.StructureHandle = "";
+                    var values = DeviceEditing.Reconcile(definition, record.Values, out _);
+                    var conexoes = definition.Parameters.FirstOrDefault(p => p.Type == ParameterType.Conexoes);
+                    if (conexoes is not null)
+                    {
+                        values[conexoes.Name] = Array.Empty<object>();
+                    }
+
+                    DeviceService.Regenerate(tr, reference, definition, record, values, forceRebuild: true);
+                    HydroLog.Info("Acompanhamento", $"cópia de {original} virou {record.Name} (bloco próprio, sem as conexões do original)");
                     changed.Add(reference.Handle.ToString());
                 });
             }
@@ -370,7 +368,7 @@ internal static class DeviceWatcher
         {
             action();
         }
-        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or Autodesk.AutoCAD.Runtime.Exception)
+        catch (Exception ex)
         {
             HydroLog.Warn("Acompanhamento", $"{reference.Handle}: {ex.Message}");
             editor.WriteMessage($"\nHYDRO {reference.Handle}: {ex.Message}");

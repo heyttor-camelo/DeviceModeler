@@ -254,7 +254,7 @@ internal static class DrawingVersion
         }
         else
         {
-            nod.UpgradeOpen();
+            nod.Writable();
             xrecord = new Xrecord();
             nod.SetAt(Key, xrecord);
             tr.AddNewlyCreatedDBObject(xrecord, true);

@@ -105,13 +105,13 @@ internal static class NetworkModel
 
             record.Number = number;
             record.Name = name;
-            reference.UpgradeOpen();
+            reference.Writable();
             record.Write(reference, tr);
             if (CivilLinks.TryGet<Autodesk.Civil.DatabaseServices.Structure>(tr, db, record.StructureHandle, out var structure))
             {
                 try
                 {
-                    structure.UpgradeOpen();
+                    structure.Writable();
                     structure.Name = name;
                 }
                 catch (Autodesk.AutoCAD.Runtime.Exception)

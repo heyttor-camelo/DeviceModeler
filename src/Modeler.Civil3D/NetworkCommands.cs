@@ -280,7 +280,7 @@ public sealed class NetworkCommands
                     values = DeviceEditing.Edit(definition, values, top.Name, surface.FindElevationAtXY(position.X, position.Y), out var notes);
                     messages.AddRange(notes);
                 }
-                catch (Autodesk.AutoCAD.Runtime.Exception)
+                catch (Exception)
                 {
                     messages.Add("ponto fora da superfície: elevação da tampa do padrão");
                 }
@@ -340,7 +340,7 @@ public sealed class NetworkCommands
             Report(record.Name, messages);
             return new Step(reference.ObjectId, structureId, pipeId, previous?.Device ?? ObjectId.Null, position, bottomNow);
         }
-        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or Autodesk.AutoCAD.Runtime.Exception)
+        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or Autodesk.AutoCAD.Runtime.Exception or Autodesk.Civil.CivilException or ArgumentException)
         {
             tr.Abort();
             Ed.WriteMessage($"\nHYDRO: dispositivo não inserido: {ex.Message}");
@@ -409,24 +409,14 @@ public sealed class NetworkCommands
             }
 
             var startNear = pipe.StartPoint.DistanceTo(reference.Position) <= pipe.EndPoint.DistanceTo(reference.Position);
-            var (point, current) = startNear ? (pipe.StartPoint, pipe.StartStructureId) : (pipe.EndPoint, pipe.EndStructureId);
+            var current = startNear ? pipe.StartStructureId : pipe.EndStructureId;
             if (!current.IsNull)
             {
                 continue;
             }
 
-            pipe.UpgradeOpen();
+            pipe.Writable();
             pipe.ConnectToStructure(startNear ? ConnectorPositionType.Start : ConnectorPositionType.End, structureId, true);
-            // a ligação não deve mover a ponta: o furo foi feito para ela
-            if (startNear)
-            {
-                pipe.StartPoint = point;
-            }
-            else
-            {
-                pipe.EndPoint = point;
-            }
-
             messages.Add($"tubo {pipe.Name} ligado à estrutura");
         }
     }
@@ -478,7 +468,7 @@ public sealed class NetworkCommands
         {
             action();
         }
-        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or Autodesk.AutoCAD.Runtime.Exception or ArgumentException)
+        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or Autodesk.AutoCAD.Runtime.Exception or ArgumentException or Autodesk.Civil.CivilException)
         {
             HydroLog.Warn("Rede", ex.Message);
             Ed.WriteMessage($"\nHYDRO: {ex.Message}");

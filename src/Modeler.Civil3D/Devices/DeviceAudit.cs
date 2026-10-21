@@ -158,7 +158,7 @@ internal static class DeviceAudit
 
                 if (definition is null)
                 {
-                    reference.UpgradeOpen();
+                    reference.Writable();
                     record.Write(reference, tr);
                     continue;
                 }

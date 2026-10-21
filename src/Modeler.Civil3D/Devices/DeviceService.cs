@@ -73,7 +73,7 @@ internal static class DeviceService
         var instance = definition.Evaluate(values);
         messages.AddRange(instance.Warnings);
 
-        reference.UpgradeOpen();
+        reference.Writable();
         if (shifted)
         {
             reference.Position = new Point3d(reference.Position.X, reference.Position.Y, 0);
@@ -103,7 +103,7 @@ internal static class DeviceService
         }
         else if (rebuild)
         {
-            block.UpgradeOpen();
+            block.Writable();
             foreach (ObjectId id in block)
             {
                 tr.GetObject(id, OpenMode.ForWrite).Erase();
@@ -131,7 +131,7 @@ internal static class DeviceService
     /// registro (id e nome novos já definidos pelo chamador).</summary>
     public static void SeparateBlock(Transaction tr, BlockReference reference, DeviceDefinition definition, DeviceRecord record)
     {
-        reference.UpgradeOpen();
+        reference.Writable();
         var block = (BlockTableRecord)tr.GetObject(reference.BlockTableRecord, OpenMode.ForRead);
         if (block.GetBlockReferenceIds(true, false).Count > 1)
         {
@@ -295,7 +295,7 @@ internal static class DeviceService
             return layers[name];
         }
 
-        layers.UpgradeOpen();
+        layers.Writable();
         var layer = new LayerTableRecord { Name = name, Color = Color.FromColorIndex(ColorMethod.ByAci, color) };
         var id = layers.Add(layer);
         tr.AddNewlyCreatedDBObject(layer, true);

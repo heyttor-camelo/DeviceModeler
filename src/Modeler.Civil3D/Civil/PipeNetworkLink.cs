@@ -91,6 +91,11 @@ internal static class PipeNetworkLink
                 var sizeId = family[i];
                 var size = (PartSize)tr.GetObject(sizeId, OpenMode.ForRead);
                 var diameter = Number(size, PartContextType.PipeInnerDiameter);
+                // catálogos métricos podem guardar o diâmetro em mm: acima de 10 é mm (nenhum tubo tem 10 m)
+                if (diameter > 10)
+                {
+                    diameter /= 1000;
+                }
                 result.Add(new PipeSize(familyId, sizeId, $"{family.Description} — {size.Name}", diameter));
             }
         }
@@ -167,9 +172,8 @@ internal static class PipeNetworkLink
             pipe.ConnectToStructure(ConnectorPositionType.End, endStructure, true);
         }
 
-        // ligar à estrutura pode mexer nas pontas: devolve às posições pedidas
-        pipe.StartPoint = start;
-        pipe.EndPoint = end;
+        // não regrava StartPoint/EndPoint depois de ligar: isso poderia desligar a ponta da estrutura
+        // (as pontas pedidas já são o centro de cada estrutura)
         return pipe;
     }
 

@@ -103,7 +103,7 @@ internal static class NetworkSync
                 continue;
             }
 
-            pipe.UpgradeOpen();
+            pipe.Writable();
             if (startIsNear)
             {
                 pipe.StartPoint = Solid3dBuilder.ToPoint(match.End);

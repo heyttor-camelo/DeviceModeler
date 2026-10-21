@@ -305,7 +305,7 @@ public sealed class OutputCommands
         {
             action();
         }
-        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or Autodesk.AutoCAD.Runtime.Exception or ArgumentException)
+        catch (Exception ex) when (ex is ModelerException or InvalidOperationException or Autodesk.AutoCAD.Runtime.Exception or ArgumentException or Autodesk.Civil.CivilException)
         {
             HydroLog.Warn("Saídas", ex.Message);
             Ed.WriteMessage($"\nHYDRO: {ex.Message}");
