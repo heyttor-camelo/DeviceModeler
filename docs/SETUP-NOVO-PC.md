@@ -54,7 +54,28 @@ Uma boa primeira mensagem:
 
 ## 4. Instalar o REA (engenharia reversa)
 
-O REA é um servidor MCP distribuído pelo npm (`rea-agents`). Ele foi usado para estudar o SOLIDOS.
+O REA ("Reverse Engineer Anything", https://github.com/morluto/rea) é um servidor MCP e uma CLI
+distribuídos pelo npm (`rea-agents`). Foi com ele que estudamos o SOLIDOS. O método, o que se
+aprendeu e como isso virou o desenho do DeviceModeler estão em
+[ESTUDO-SOLIDOS.md](ESTUDO-SOLIDOS.md).
+
+Requisito: Node.js (passo 1). Não há instalação separada: o `npx` baixa a versão fixada
+(`rea-agents@6.7.0`) na primeira execução.
+
+### 4.1 Jeito recomendado: assistente do REA
+
+Com o Claude Code (CLI) e/ou o app desktop já instalados e fechados, rode:
+
+```bash
+npx -y rea-agents@6.7.0 setup
+```
+
+O assistente detecta os clientes instalados (Claude Code, app do Claude e outros), pergunta em
+quais registrar o REA e instala a **skill** `reverse-engineer-anything`, que ensina o Claude a
+usá-lo. Use `--dry-run` para ver o plano antes e `--all-detected --yes` para aplicar sem perguntas.
+Depois, reabra o Claude.
+
+### 4.2 Jeito manual (se preferir ou se o assistente falhar)
 
 **Para o Claude Code CLI,** registre o servidor para o seu usuário:
 
@@ -77,16 +98,23 @@ claude mcp add rea --scope user -- cmd /d /c npx -y rea-agents@6.7.0 mcp
 
 Se o arquivo já tiver um `mcpServers`, só acrescente a entrada `"rea"`. Reinicie o app.
 
-Para conferir que funciona:
+**Skill (manual):** copie a pasta `%USERPROFILE%\.claude\skills\reverse-engineer-anything\` da
+máquina antiga para o mesmo lugar no PC novo. O REA funciona sem ela, mas o Claude o usa melhor
+com ela.
+
+### 4.3 Conferir
 
 ```bash
 npx -y rea-agents@6.7.0 doctor
 ```
 
-**Skill do REA (opcional):** na máquina antiga existe a skill `reverse-engineer-anything` em
-`%USERPROFILE%\.claude\skills\reverse-engineer-anything\`. Copie essa pasta para o mesmo lugar no
-PC novo, ou veja como instalá-la em https://github.com/morluto/rea#readme. Ela ensina o Claude a
-usar o REA, mas o REA funciona sem ela.
+O `doctor` vai dizer `healthy: false` por falta de Ghidra, Hopper, IDA, JADX e Kuna. **Isso é
+normal:** esses motores servem para binários nativos e Android. Para DLLs .NET, como o SOLIDOS, o
+REA usa a inspeção gerenciada embutida e não precisa de nenhum deles. Se um dia quiser analisar
+binários nativos, o `doctor` mostra o que configurar (por exemplo, `GHIDRA_INSTALL_DIR`).
+
+No Claude, confirme que o REA apareceu: no CLI, `claude mcp list` deve mostrar `rea`. No app, as
+ferramentas `rea` aparecem na lista de conectores da conversa.
 
 **Descompilar código .NET:** o REA lista tipos e membros, mas não mostra o corpo dos métodos.
 Para isso use o ILSpy:
@@ -121,5 +149,8 @@ Depois de carregar, rode `DM_CATALOGO`; deve aparecer `pv_retangular`. Em seguid
 | 1 | Linguagem YAML, avaliador de expressões, dependências, fluxo, árvore CSG, saídas e o PV retangular | pronta, 114 testes |
 | 2 | Plugin do Civil 3D: sólidos, Xrecord, janela de parâmetros, grips, ligação com tubos e superfície, quantitativos, SWMM, bundle | compila, **falta testar no Civil 3D** |
 | Depois | categoria linear, catálogo DNIT (IPR 736) com presets, prévia nos grips, nós SWMM storage/outfall | planejado |
+
+A arquitetura da Fase 2 foi inspirada no SOLIDOS, estudado com o REA e o ILSpy. O método, a tabela
+"SOLIDOS × DeviceModeler" e as ideias que ainda faltam estão em [ESTUDO-SOLIDOS.md](ESTUDO-SOLIDOS.md).
 
 O histórico completo está em `git log`. O detalhe técnico está no `CLAUDE.md` e no `README.md`.

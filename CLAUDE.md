@@ -96,6 +96,9 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
 
 ## SOLIDOS (referência de arquitetura)
 
+O método completo, a tabela comparativa e as ideias pendentes estão em `docs/ESTUDO-SOLIDOS.md`.
+A instalação do REA está em `docs/SETUP-NOVO-PC.md` §4.
+
 O usuário tem o plugin comercial SOLIDOS (TBN2NET) instalado em
 `%APPDATA%\Autodesk\ApplicationPlugins\SOLIDOS.bundle` e autorizou estudá-lo para se inspirar.
 Use REA ou ILSpy para tirar dúvidas de **mecanismo**, mas escreva o código do zero.
