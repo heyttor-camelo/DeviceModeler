@@ -257,3 +257,9 @@ O que se aprendeu:
   `dotnet tool install -g ilspycmd` e depois
   `ilspycmd -t <Tipo> <dll> -o <pasta-temp>`, sempre fora do repositório.
 - Python pode não estar disponível no Windows. Prefira PowerShell, Bash ou as ferramentas de edição.
+
+## Diário entre máquinas
+
+Ao encerrar uma sessão, acrescente uma entrada em `docs/DIARIO.md` (data, máquina, o que foi feito,
+decisões, pendências), commit "Diário: <data> <máquina>" e push. Ao começar em outra máquina, leia o
+`docs/DIARIO.md` antes de qualquer coisa. O usuário não tem o histórico da conversa nas outras máquinas.
