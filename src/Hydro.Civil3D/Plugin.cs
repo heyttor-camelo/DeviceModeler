@@ -19,20 +19,22 @@ public sealed class Plugin : IExtensionApplication
     public void Initialize()
     {
         HydroLog.Start();
-        DeviceGripOverrule.Register();
-        DeviceWatcher.Start();
-        DeviceObjectOverrule.Register();
-        ConnectorSnap.Register();
-        DeviceInteraction.Start();
-        Drawing.OutputsUpdater.Start();
-        Drawing.ProjectionGripOverrule.Register();
-        HydroRibbon.Initialize();
+        // cada parte se registra sozinha: uma falha numa não impede as outras nem derruba a carga
+        Guard.Run("Carga: janelas", Guard.WatchDispatcher);
+        Guard.Run("Carga: grips", DeviceGripOverrule.Register);
+        Guard.Run("Carga: acompanhamento", DeviceWatcher.Start);
+        Guard.Run("Carga: cópias", DeviceObjectOverrule.Register);
+        Guard.Run("Carga: osnap", ConnectorSnap.Register);
+        Guard.Run("Carga: dica e menu", DeviceInteraction.Start);
+        Guard.Run("Carga: saídas", Drawing.OutputsUpdater.Start);
+        Guard.Run("Carga: grips de perfil", Drawing.ProjectionGripOverrule.Register);
+        Guard.Run("Carga: Ribbon", HydroRibbon.Initialize);
         foreach (Document document in AcApp.DocumentManager)
         {
             WatchCommands(document);
         }
 
-        AcApp.DocumentManager.DocumentCreated += (_, e) => WatchCommands(e.Document);
+        AcApp.DocumentManager.DocumentCreated += (_, e) => Guard.Run("Painel", () => WatchCommands(e.Document));
         var editor = AcApp.DocumentManager.MdiActiveDocument?.Editor;
         if (editor is null)
         {
@@ -46,11 +48,11 @@ public sealed class Plugin : IExtensionApplication
 
     public void Terminate()
     {
-        DeviceGripOverrule.Unregister();
-        DeviceObjectOverrule.Unregister();
-        DeviceInteraction.Stop();
-        Drawing.ProjectionGripOverrule.Unregister();
-        HydroRibbon.Terminate();
+        Guard.Run("Encerramento", DeviceGripOverrule.Unregister);
+        Guard.Run("Encerramento", DeviceObjectOverrule.Unregister);
+        Guard.Run("Encerramento", DeviceInteraction.Stop);
+        Guard.Run("Encerramento", Drawing.ProjectionGripOverrule.Unregister);
+        Guard.Run("Encerramento", HydroRibbon.Terminate);
         HydroLog.Stop();
     }
 
@@ -58,6 +60,6 @@ public sealed class Plugin : IExtensionApplication
     /// quando nada mudou: as instâncias ficam em cache).</summary>
     private static void WatchCommands(Document document)
     {
-        document.CommandEnded += (_, _) => HydroPanel.NotifyChanged();
+        document.CommandEnded += (_, _) => Guard.Run("Painel", HydroPanel.NotifyChanged);
     }
 }

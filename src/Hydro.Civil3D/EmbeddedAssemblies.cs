@@ -27,8 +27,22 @@ internal static class EmbeddedAssemblies
     {
         var self = typeof(EmbeddedAssemblies).Assembly;
         _context = AssemblyLoadContext.GetLoadContext(self) ?? AssemblyLoadContext.Default;
-        _context.Resolving += (context, name) => Resolve(name);
-        AppDomain.CurrentDomain.AssemblyResolve += (_, args) => Resolve(new AssemblyName(args.Name));
+        _context.Resolving += (context, name) => SafeResolve(name);
+        AppDomain.CurrentDomain.AssemblyResolve += (_, args) => SafeResolve(new AssemblyName(args.Name));
+    }
+
+    /// <summary>Os eventos de resolução rodam a qualquer momento: uma exceção ali derrubaria o AutoCAD.
+    /// Sem o assembly, o .NET acusa a falta dele do jeito normal.</summary>
+    private static Assembly? SafeResolve(AssemblyName name)
+    {
+        try
+        {
+            return Resolve(name);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>Nomes das dependências embutidas (para o HY_INFO/diagnóstico).</summary>

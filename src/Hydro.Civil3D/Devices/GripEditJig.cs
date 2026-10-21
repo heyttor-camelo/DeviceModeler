@@ -24,7 +24,11 @@ internal sealed class GripEditJig : DrawJig
         _prompt = prompt;
     }
 
-    protected override SamplerStatus Sampler(JigPrompts prompts)
+    // Sampler e desenho rodam dentro do Editor.Drag nativo: exceção ali derrubaria o AutoCAD
+    protected override SamplerStatus Sampler(JigPrompts prompts) =>
+        Infra.Guard.Run("Jig", () => Sample(prompts), SamplerStatus.Cancel);
+
+    private SamplerStatus Sample(JigPrompts prompts)
     {
         var options = new JigPromptPointOptions($"\n{_prompt}: ")
         {
@@ -53,7 +57,9 @@ internal sealed class GripEditJig : DrawJig
         return SamplerStatus.OK;
     }
 
-    protected override bool WorldDraw(WorldDraw draw)
+    protected override bool WorldDraw(WorldDraw draw) => Infra.Guard.Run("Jig", () => Draw(draw), true);
+
+    private bool Draw(WorldDraw draw)
     {
         try
         {

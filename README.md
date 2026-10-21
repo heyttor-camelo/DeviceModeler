@@ -553,6 +553,21 @@ comando. **Esc nunca fecha a janela.** O log comum fica em `%LOCALAPPDATA%\HYDRO
 A Ribbon ganha a aba **HYDRO**, com um botão grande por categoria (`C3DHYDRO <categoria>`) e os
 atalhos Inserir, Editar e Conectar.
 
+**Se o Civil 3D fechar sozinho:** veja a última linha do log de hoje
+(`%LOCALAPPDATA%\HYDRO\logs\hydro-<data>-<processo>.log`). Ali ficam:
+- o passo a passo de cada nó do `HY_REDE` (rede, bloco, referência, estrutura nula, tubo, conexões,
+  commit);
+- as fases da fila do fim do comando.
+
+Depois veja o Visualizador de Eventos (Aplicativo, `Application Error` 1000 e `.NET Runtime` 1026)
+e os dumps em `%LOCALAPPDATA%\CrashDumps`. Código 0xc00000fd é estouro de pilha (recursão
+infinita).
+
+O código que o AutoCAD chama fora de um comando passa pelo `Guard` (`Infra/Guard.cs`): erros vão
+para o log (`Erro`, com a pilha) e o AutoCAD continua. Isso vale para overrules, jigs, eventos,
+dica, menu de contexto, Ribbon e janelas. Estouro de pilha não tem como ser pego: o .NET encerra o
+processo.
+
 ### Como fica no DWG
 
 O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (implementação própria):

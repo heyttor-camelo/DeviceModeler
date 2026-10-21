@@ -85,6 +85,7 @@ public sealed class NetworkCommands
         _lastDiameter = diameter.Status == PromptStatus.OK ? diameter.Value : _lastDiameter;
         _lastSlope = slope.Status == PromptStatus.OK ? slope.Value : _lastSlope;
         var surfaceId = PickSurface();
+        HydroLog.Info("Rede", $"HY_REDE: dispositivo {definition.Id} {definition.Version}, rede '{networkName}', Ø {_lastDiameter:0.###} m, declividade {_lastSlope:0.####} m/m, {(surfaceId.IsNull ? "sem superfície" : "com superfície")}");
 
         var steps = new Stack<Step>();
         Point3d? previous = null;
@@ -109,7 +110,7 @@ public sealed class NetworkCommands
                 break;
             }
 
-            var step = AddStep(definition, baseValues, networkName, surfaceId, steps.Count > 0 ? steps.Peek() : null, jig.Position, jig.Rotation);
+            var step = AddStep(definition, baseValues, networkName, surfaceId, steps.Count > 0 ? steps.Peek() : null, jig.Position, jig.Rotation, steps.Count + 1);
             if (step is not null)
             {
                 steps.Push(step);
@@ -118,6 +119,7 @@ public sealed class NetworkCommands
         }
 
         Ed.WriteMessage($"\nRede '{networkName}': {steps.Count} dispositivo(s), {steps.Count(s => !s.Pipe.IsNull)} tubo(s).");
+        HydroLog.Info("Rede", $"HY_REDE: fim do lançamento, {steps.Count} nó(s)");
         if (steps.Count > 1)
         {
             var number = Ed.GetKeywords(new PromptKeywordOptions("\nNumerar a rede agora? [Sim/Não] <Sim>: ", "Sim Não") { AllowNone = true });
@@ -252,8 +254,12 @@ public sealed class NetworkCommands
     private sealed record Step(ObjectId Device, ObjectId Structure, ObjectId Pipe, ObjectId Previous, Point3d Position, double Bottom);
 
     private static Step? AddStep(DeviceDefinition definition, Dictionary<string, object> baseValues, string networkName, ObjectId surfaceId,
-        Step? previous, Point3d position, double rotation)
+        Step? previous, Point3d position, double rotation, int index)
     {
+        // passo a passo no log: se o AutoCAD fechar, a última linha diz onde parou
+        void Trace(string what) => HydroLog.Info("Rede", $"nó {index}: {what}");
+
+        Trace($"início em ({position.X:0.###}; {position.Y:0.###}), rotação {rotation * 180 / Math.PI:0.#}°, {(previous is null ? "primeiro nó" : "com tubo desde o anterior")}");
         using var tr = Db.TransactionManager.StartTransaction();
         var messages = new List<string>();
         try
@@ -261,9 +267,11 @@ public sealed class NetworkCommands
             var values = new Dictionary<string, object>(baseValues, StringComparer.Ordinal);
             var top = definition.Parameters.FirstOrDefault(p => p.Target == TargetKind.Superficie && p.IsNumeric);
             var bottom = definition.Parameters.FirstOrDefault(p => p.Target == TargetKind.Tubo && p.IsNumeric);
+            Trace($"rede '{networkName}'");
             var network = PipeNetworkLink.GetOrCreate(tr, Db, networkName, ObjectId.Null);
             var sizes = PipeNetworkLink.PipeSizes(tr, network);
             var size = sizes.OrderBy(s => Math.Abs(s.InnerDiameter - _lastDiameter)).FirstOrDefault();
+            Trace($"rede pronta: {sizes.Count} tamanho(s) de tubo na lista de peças{(size is null ? "" : $", usando {size.Description}")}");
 
             // elevações: a tampa pela superfície (se houver); o fundo pela declividade desde o anterior
             if (previous is not null && bottom is not null)
@@ -287,7 +295,9 @@ public sealed class NetworkCommands
             }
 
             var instance = definition.Evaluate(values);
+            Trace($"avaliado ({instance.Solids.Count} sólido(s)); criando o bloco");
             var blockId = DeviceService.CreateBlock(tr, Db, instance);
+            Trace("bloco criado");
             var used = new HashSet<string>(DeviceService.AllDevices(tr, Db).Select(r => DeviceRecord.TryRead(r, tr)!.Name), StringComparer.OrdinalIgnoreCase);
             var record = new DeviceRecord
             {
@@ -306,10 +316,14 @@ public sealed class NetworkCommands
                 record.SurfaceFingerprint = s.ComputeFingerPrint().ToString(CultureInfo.InvariantCulture);
             }
 
+            Trace($"inserindo a referência {record.Name}");
             var reference = DeviceService.InsertReference(tr, Db, blockId, position, rotation, record);
+            Trace("referência inserida");
             var entry = InstanceCache.Get(tr, reference)!;
             var (rim, sump) = NetworkSync.Elevations(entry);
+            Trace($"criando a estrutura nula (tampa {rim:0.###}, fundo {sump:0.###})");
             var structureId = PipeNetworkLink.AddNullStructure(tr, network, position, rotation, rim, sump, messages);
+            Trace(structureId.IsNull ? "sem estrutura nula" : "estrutura nula criada");
             if (!structureId.IsNull)
             {
                 record.StructureHandle = tr.GetObject(structureId, OpenMode.ForRead).Handle.ToString();
@@ -327,16 +341,21 @@ public sealed class NetworkCommands
                 {
                     var start = new Point3d(previous.Position.X, previous.Position.Y, previous.Bottom + (size.InnerDiameter / 2));
                     var end = new Point3d(position.X, position.Y, sump + (size.InnerDiameter / 2));
+                    Trace("criando o tubo");
                     var pipe = PipeNetworkLink.AddPipe(tr, network, size, start, end, Structure(tr, previous.Device), structureId);
                     pipeId = pipe.ObjectId;
+                    Trace($"tubo {pipe.Name} criado; ligando as conexões");
                     AddConnection(tr, (BlockReference)tr.GetObject(previous.Device, OpenMode.ForRead), pipe, messages);
                     AddConnection(tr, reference, pipe, messages);
+                    Trace("conexões ligadas");
                     messages.Add($"tubo {pipe.Name} ({size.Description}), {pipe.Length2D:0.00} m");
                 }
             }
 
             var bottomNow = bottom is not null && DeviceRecord.TryRead(reference, tr) is { } final && final.Values.GetValueOrDefault(bottom.Name) is double b ? b : sump;
+            Trace("commit");
             tr.Commit();
+            Trace("pronto (a fila do fim do comando refaz o que faltar)");
             Report(record.Name, messages);
             return new Step(reference.ObjectId, structureId, pipeId, previous?.Device ?? ObjectId.Null, position, bottomNow);
         }
@@ -344,7 +363,7 @@ public sealed class NetworkCommands
         {
             tr.Abort();
             Ed.WriteMessage($"\nHYDRO: dispositivo não inserido: {ex.Message}");
-            HydroLog.Warn("Rede", ex.Message);
+            HydroLog.Error("Rede", $"nó {index}: dispositivo não inserido", ex);
             return null;
         }
     }

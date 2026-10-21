@@ -35,7 +35,11 @@ internal sealed class PlacementJig : EntityJig
         return result.Status is PromptStatus.OK or PromptStatus.None;
     }
 
-    protected override SamplerStatus Sampler(JigPrompts prompts)
+    // Sampler e desenho rodam dentro do Editor.Drag nativo: exceção ali derrubaria o AutoCAD
+    protected override SamplerStatus Sampler(JigPrompts prompts) =>
+        Infra.Guard.Run("Jig", () => Sample(prompts), SamplerStatus.Cancel);
+
+    private SamplerStatus Sample(JigPrompts prompts)
     {
         if (!_rotating)
         {
@@ -82,7 +86,9 @@ internal sealed class PlacementJig : EntityJig
         return SamplerStatus.OK;
     }
 
-    protected override bool Update()
+    protected override bool Update() => Infra.Guard.Run("Jig", UpdateEntity, false);
+
+    private bool UpdateEntity()
     {
         var reference = (BlockReference)Entity;
         reference.Position = _position;

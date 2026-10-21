@@ -91,7 +91,7 @@ internal sealed class ProjectionGripOverrule : GripOverrule
         }
         catch (Exception ex)
         {
-            HydroLog.Warn("Grips", "grips na vista de perfil: " + ex.Message);
+            Guard.Report("Grips: vista de perfil", ex);
         }
     }
 
@@ -101,7 +101,7 @@ internal sealed class ProjectionGripOverrule : GripOverrule
         {
             if (grip is ProfileGrip profile)
             {
-                profile.Drag(offset);
+                Guard.Run("Grips", () => profile.Drag(offset));
             }
         }
     }
@@ -189,17 +189,20 @@ internal sealed class ProjectionGripOverrule : GripOverrule
 
         public override void OnGripStatusChanged(ObjectId entityId, Status newStatus)
         {
-            if (newStatus == Status.GripEnd && _value is { } value)
+            Guard.Run("Grips", () =>
             {
-                DeviceWatcher.QueueGrip(_device, _grip.Parameter, value);
-            }
+                if (newStatus == Status.GripEnd && _value is { } value)
+                {
+                    DeviceWatcher.QueueGrip(_device, _grip.Parameter, value);
+                }
 
-            if (newStatus is Status.GripEnd or Status.GripAbort)
-            {
-                GripPoint = _original;
-                _value = null;
-                _preview = null;
-            }
+                if (newStatus is Status.GripEnd or Status.GripAbort)
+                {
+                    GripPoint = _original;
+                    _value = null;
+                    _preview = null;
+                }
+            });
 
             base.OnGripStatusChanged(entityId, newStatus);
         }
@@ -245,12 +248,12 @@ internal sealed class ProjectionGripOverrule : GripOverrule
             }
             catch (Exception ex)
             {
-                HydroLog.Warn("Grips", "desenho do grip de perfil: " + ex.Message);
+                Guard.Report("Grips: desenho de perfil", ex);
             }
 
             return true;
         }
 
-        public override string GetTooltip() => $"Perfil: {_entry.Definition.FindParameter(_grip.Parameter)?.Label ?? _grip.Parameter}";
+        public override string GetTooltip() => Guard.Run("Grips", () => $"Perfil: {_entry.Definition.FindParameter(_grip.Parameter)?.Label ?? _grip.Parameter}", "");
     }
 }

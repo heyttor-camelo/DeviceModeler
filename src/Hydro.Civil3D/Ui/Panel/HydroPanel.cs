@@ -223,7 +223,7 @@ internal sealed class HydroPanel : SW.Window, IPanelHost
             _idleHooked = false;
             if (_instance == this)
             {
-                Refresh();
+                Guard.Run("Painel", Refresh);
             }
         }
 
@@ -232,7 +232,7 @@ internal sealed class HydroPanel : SW.Window, IPanelHost
 
     public void RebuildTabs() => BuildTabs();
 
-    private static void OnDocumentActivated(object? sender, DocumentCollectionEventArgs e) => NotifyChanged();
+    private static void OnDocumentActivated(object? sender, DocumentCollectionEventArgs e) => Guard.Run("Painel", NotifyChanged);
 
     // ------------------------------------------------------------------ montagem
 

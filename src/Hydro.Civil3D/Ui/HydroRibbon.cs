@@ -129,7 +129,8 @@ internal static class HydroRibbon
 
     private static void OnIdle(object? sender, EventArgs e)
     {
-        if (Ensure())
+        // o Idle dispara sem parar: com erro, desiste (sem a aba, os comandos continuam valendo)
+        if (Guard.Run("Ribbon", Ensure, true))
         {
             Unhook();
         }
@@ -145,7 +146,7 @@ internal static class HydroRibbon
 
         public bool CanExecute(object? parameter) => true;
 
-        public void Execute(object? parameter)
+        public void Execute(object? parameter) => Guard.Run("Ribbon", () =>
         {
             var command = parameter switch
             {
@@ -158,6 +159,6 @@ internal static class HydroRibbon
             {
                 document.SendStringToExecute("\x03\x03" + command, true, false, true);
             }
-        }
+        });
     }
 }

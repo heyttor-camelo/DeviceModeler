@@ -30,11 +30,18 @@ internal sealed class DecimalCommaInput : IDisposable
 
     private static void OnPreTranslateMessage(object? sender, Autodesk.AutoCAD.ApplicationServices.PreTranslateMessageEventArgs e)
     {
-        var message = e.Message;
-        if (message.message == WmChar && (long)message.wParam == ',')
+        try
         {
-            message.wParam = (IntPtr)'.';
-            e.Message = message;
+            var message = e.Message;
+            if (message.message == WmChar && (long)message.wParam == ',')
+            {
+                message.wParam = (IntPtr)'.';
+                e.Message = message;
+            }
+        }
+        catch (Exception ex)
+        {
+            Guard.Report("Teclado", ex);
         }
     }
 }

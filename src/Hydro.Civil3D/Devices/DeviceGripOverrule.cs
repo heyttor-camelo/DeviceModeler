@@ -78,7 +78,7 @@ internal sealed class DeviceGripOverrule : GripOverrule
         catch (Exception ex)
         {
             // definição ausente ou inválida: ficam só os grips normais do bloco
-            HydroLog.Warn("Grips", ex.Message);
+            Guard.Report("Grips", ex);
         }
     }
 
@@ -89,7 +89,7 @@ internal sealed class DeviceGripOverrule : GripOverrule
         {
             if (grip is DeviceGrip device)
             {
-                device.Drag(offset);
+                Guard.Run("Grips", () => device.Drag(offset));
             }
             else
             {
@@ -102,7 +102,6 @@ internal sealed class DeviceGripOverrule : GripOverrule
             base.MoveGripPointsAt(entity, standard, offset, bitFlags);
         }
     }
-
 
     /// <summary>Grip ligado a um parâmetro, com o estiramento nativo do AutoCAD.</summary>
     private class DeviceGrip : GripData
@@ -129,16 +128,19 @@ internal sealed class DeviceGripOverrule : GripOverrule
 
         public override void OnGripStatusChanged(ObjectId entityId, Status newStatus)
         {
-            if (newStatus == Status.GripEnd && Session.Value is { } value)
+            Guard.Run("Grips", () =>
             {
-                DeviceWatcher.QueueGrip(Entity, Session.Grip.Parameter, value);
-            }
+                if (newStatus == Status.GripEnd && Session.Value is { } value)
+                {
+                    DeviceWatcher.QueueGrip(Entity, Session.Grip.Parameter, value);
+                }
 
-            if (newStatus is Status.GripEnd or Status.GripAbort)
-            {
-                Session.Reset();
-                GripPoint = Session.Original;
-            }
+                if (newStatus is Status.GripEnd or Status.GripAbort)
+                {
+                    Session.Reset();
+                    GripPoint = Session.Original;
+                }
+            });
 
             base.OnGripStatusChanged(entityId, newStatus);
         }
@@ -157,17 +159,14 @@ internal sealed class DeviceGripOverrule : GripOverrule
             }
             catch (Exception ex)
             {
-                HydroLog.Warn("Grips", "desenho do grip: " + ex.Message);
+                Guard.Report("Grips: desenho", ex);
             }
 
             return true;
         }
 
-        public override string GetTooltip()
-        {
-            var verb = Session.Grip.Kind == GripKind.Rotacionar ? "Girar" : "Esticar";
-            return $"{verb}: {Session.Parameter?.Label ?? Session.Grip.Parameter}";
-        }
+        public override string GetTooltip() => Guard.Run("Grips", () =>
+            $"{(Session.Grip.Kind == GripKind.Rotacionar ? "Girar" : "Esticar")}: {Session.Parameter?.Label ?? Session.Grip.Parameter}", "");
     }
 
     /// <summary>Grip que, ao ser clicado, abre o <c>HY_GRIP</c> (arrastar ou digitar o valor) em vez
@@ -183,7 +182,7 @@ internal sealed class DeviceGripOverrule : GripOverrule
 
         public override ReturnValue OnHotGrip(ObjectId entityId, Context contextFlags)
         {
-            GripCommands.Start(Entity, Session.Grip.Parameter);
+            Guard.Run("Grips", () => GripCommands.Start(Entity, Session.Grip.Parameter));
             return ReturnValue.GripHotToWarm;
         }
 

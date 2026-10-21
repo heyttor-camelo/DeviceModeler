@@ -53,13 +53,13 @@ internal static class DeviceWatcher
             Attach(document);
         }
 
-        AcApp.DocumentManager.DocumentCreated += (_, e) => Attach(e.Document);
-        AcApp.DocumentManager.DocumentToBeDestroyed += (_, e) =>
+        AcApp.DocumentManager.DocumentCreated += (_, e) => Infra.Guard.Run("Acompanhamento", () => Attach(e.Document));
+        AcApp.DocumentManager.DocumentToBeDestroyed += (_, e) => Infra.Guard.Run("Acompanhamento", () =>
         {
             Queues.Remove(e.Document.Database);
             InstanceCache.Forget(e.Document.Database);
             Attached.Remove(e.Document);
-        };
+        });
     }
 
     public static void QueueGrip(ObjectId entity, string parameter, double value)
@@ -103,12 +103,13 @@ internal static class DeviceWatcher
             return;
         }
 
-        document.Database.ObjectModified += OnObjectModified;
-        document.Database.ObjectErased += OnObjectErased;
-        document.CommandEnded += OnCommandEnded;
+        // tudo protegido: uma exceção num evento do banco ou do documento derrubaria o AutoCAD
+        document.Database.ObjectModified += (s, e) => Infra.Guard.Run("Acompanhamento", () => OnObjectModified(s, e));
+        document.Database.ObjectErased += (s, e) => Infra.Guard.Run("Acompanhamento", () => OnObjectErased(s, e));
+        document.CommandEnded += (s, e) => Infra.Guard.Run("Acompanhamento", () => OnCommandEnded(s, e));
         // comandos que terminam com Esc ou falha já gravaram o que mudaram: a fila é processada igual
-        document.CommandCancelled += OnCommandEnded;
-        document.CommandFailed += OnCommandEnded;
+        document.CommandCancelled += (s, e) => Infra.Guard.Run("Acompanhamento", () => OnCommandEnded(s, e));
+        document.CommandFailed += (s, e) => Infra.Guard.Run("Acompanhamento", () => OnCommandEnded(s, e));
     }
 
     private static void OnObjectModified(object sender, ObjectEventArgs e)
@@ -179,9 +180,13 @@ internal static class DeviceWatcher
             using var _ = document.LockDocument();
             using var tr = document.Database.TransactionManager.StartTransaction();
             var changed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HydroLog.Info("Acompanhamento", $"fim de {command}: fila ({pending.Summary}) — processando");
             Process(tr, document, pending, changed);
+            HydroLog.Info("Acompanhamento", $"fim de {command}: dispositivos prontos ({changed.Count} refeito(s)); atualizando saídas");
             DevicesChanged?.Invoke(tr, document.Database, new OutputChanges(changed, pending.ErasedDevices, pending.Views, pending.Alignments));
+            HydroLog.Info("Acompanhamento", $"fim de {command}: commit da fila");
             tr.Commit();
+            HydroLog.Info("Acompanhamento", $"fim de {command}: fila concluída");
         }
         catch (Exception ex)
         {
@@ -208,6 +213,7 @@ internal static class DeviceWatcher
             }
         }
 
+        HydroLog.Info("Acompanhamento", $"fase 1: grips ({pending.Grips.Count})");
         // 1. grips
         foreach (var (id, (parameter, value)) in pending.Grips)
         {
@@ -226,6 +232,7 @@ internal static class DeviceWatcher
             });
         }
 
+        HydroLog.Info("Acompanhamento", $"fase 2: cópias ({pending.Clones.Count})");
         // 2. cópias
         if (pending.Clones.Count > 0)
         {
@@ -262,6 +269,7 @@ internal static class DeviceWatcher
             }
         }
 
+        HydroLog.Info("Acompanhamento", $"fase 2b: dispositivos alterados ({pending.Devices.Count})");
         // 2b. dispositivos alterados (MOVE, ROTATE, edição): a estrutura nula acompanha e as pontas
         // soltas dos tubos vão para o conector; depois os furos se refazem pelos tubos
         foreach (var id in pending.Devices.Where(i => !i.IsErased && !pending.Grips.ContainsKey(i)))
@@ -303,6 +311,7 @@ internal static class DeviceWatcher
             return;
         }
 
+        HydroLog.Info("Acompanhamento", $"fases 3–5: tubos apagados {pending.ErasedPipes.Count}, tubos {pending.Pipes.Count}, superfícies {pending.Surfaces.Count}");
         foreach (var reference in DeviceService.AllDevices(tr, db))
         {
             Guard(editor, reference, () =>
@@ -370,7 +379,7 @@ internal static class DeviceWatcher
         }
         catch (Exception ex)
         {
-            HydroLog.Warn("Acompanhamento", $"{reference.Handle}: {ex.Message}");
+            HydroLog.Error("Acompanhamento", $"dispositivo {reference.Handle}: {ex.Message}", ex);
             editor.WriteMessage($"\nHYDRO {reference.Handle}: {ex.Message}");
         }
     }
@@ -398,6 +407,10 @@ internal static class DeviceWatcher
         public HashSet<string> Alignments { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public bool IsEmpty => Grips.Count == 0 && Clones.Count == 0 && Pipes.Count == 0 && ErasedPipes.Count == 0 && Surfaces.Count == 0 && ErasedDevices.Count == 0 && Devices.Count == 0 && Views.Count == 0 && Alignments.Count == 0;
+
+        public string Summary =>
+            $"grips {Grips.Count}, cópias {Clones.Count}, tubos {Pipes.Count}, tubos apagados {ErasedPipes.Count}, superfícies {Surfaces.Count}, " +
+            $"dispositivos {Devices.Count}, apagados {ErasedDevices.Count}, vistas {Views.Count}, alinhamentos {Alignments.Count}";
     }
 }
 

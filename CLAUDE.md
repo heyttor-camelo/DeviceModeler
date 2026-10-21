@@ -71,6 +71,16 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
 - Nunca versione DLLs da Autodesk: a licença não permite, e o repositório é **público**
   (github.com/heyttor-camelo/DeviceModeler). O YamlDotNet (MIT) pode ir no `dist/`.
 - Não copie código de terceiros descompilado (ver "SOLIDOS" abaixo).
+- **Código que o AutoCAD chama fora de um comando passa pelo `Guard`** (`Infra/Guard.cs`): overrules,
+  `Sampler`/`WorldDraw`/`Update` de jigs, eventos do banco e do documento, `PointMonitor`, menu de
+  contexto, Ribbon, `Idle`. As janelas WPF ficam cobertas pelo `Guard.WatchDispatcher`. Uma exceção
+  que escapa dali derruba o Civil 3D.
+- **Cuidado com troca em massa.** Em out/2026, trocar `UpgradeOpen()` por `Writable()` em tudo fez o
+  próprio `Writable()` chamar a si mesmo. O estouro de pilha (0xc00000fd) fechava o Civil 3D no
+  `HY_REDE`, e o .NET não deixa pegar isso em `catch`. O `PluginSourceTests` confere os métodos de
+  extensão. Para achar a causa de um crash: dump em `%LOCALAPPDATA%\CrashDumps` +
+  `dotnet-dump analyze` (`clrthreads`; com a pilha estourada, `dp <SP>` e procure o endereço de
+  retorno repetido).
 
 ## Decisões importantes (não refaça sem conversar)
 

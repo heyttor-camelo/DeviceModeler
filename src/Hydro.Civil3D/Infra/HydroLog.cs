@@ -65,7 +65,7 @@ internal static class HydroLog
         Write(LogLevel.Info, "HYDRO", "Início da sessão. " + Environment());
         try
         {
-            AcApp.DocumentManager.DocumentCreated += (_, e) => Attach(e.Document);
+            AcApp.DocumentManager.DocumentCreated += (_, e) => Guard.Run("Log", () => Attach(e.Document));
             foreach (Document document in AcApp.DocumentManager)
             {
                 Attach(document);
@@ -248,7 +248,7 @@ internal static class HydroLog
             return;
         }
 
-        document.CommandWillStart += (_, e) =>
+        document.CommandWillStart += (_, e) => Guard.Run("Log", () =>
         {
             if (!IsOurs(e.GlobalCommandName))
             {
@@ -259,18 +259,18 @@ internal static class HydroLog
             {
                 Running[document] = Stopwatch.StartNew();
             }
-        };
-        document.CommandEnded += (_, e) => Finish(document, e.GlobalCommandName, "terminado");
-        document.CommandCancelled += (_, e) => Finish(document, e.GlobalCommandName, "cancelado");
-        document.CommandFailed += (_, e) => Finish(document, e.GlobalCommandName, "FALHOU");
-        document.BeginDocumentClose += (_, _) =>
+        });
+        document.CommandEnded += (_, e) => Guard.Run("Log", () => Finish(document, e.GlobalCommandName, "terminado"));
+        document.CommandCancelled += (_, e) => Guard.Run("Log", () => Finish(document, e.GlobalCommandName, "cancelado"));
+        document.CommandFailed += (_, e) => Guard.Run("Log", () => Finish(document, e.GlobalCommandName, "FALHOU"));
+        document.BeginDocumentClose += (_, _) => Guard.Run("Log", () =>
         {
             Attached.Remove(document);
             lock (Gate)
             {
                 Running.Remove(document);
             }
-        };
+        });
     }
 
     private static void Finish(Document document, string command, string how)

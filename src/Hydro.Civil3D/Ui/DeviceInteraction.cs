@@ -31,8 +31,8 @@ internal static class DeviceInteraction
             Attach(document);
         }
 
-        AcApp.DocumentManager.DocumentCreated += (_, e) => Attach(e.Document);
-        AcApp.DocumentManager.DocumentToBeDestroyed += (_, e) => Attached.Remove(e.Document);
+        AcApp.DocumentManager.DocumentCreated += (_, e) => Guard.Run("Dica", () => Attach(e.Document));
+        AcApp.DocumentManager.DocumentToBeDestroyed += (_, e) => Guard.Run("Dica", () => Attached.Remove(e.Document));
         AddMenu();
     }
 
@@ -97,7 +97,7 @@ internal static class DeviceInteraction
         }
         catch (Exception ex)
         {
-            HydroLog.Warn("Dica", ex.Message);
+            Guard.Report("Dica", ex);
         }
     }
 
@@ -154,18 +154,18 @@ internal static class DeviceInteraction
             {
                 var item = new MenuItem(text);
                 var send = command;
-                item.Click += (_, _) => Run(send);
+                item.Click += (_, _) => Guard.Run("Menu", () => Run(send));
                 _menu.MenuItems.Add(item);
             }
 
-            _menu.Popup += (_, _) =>
+            _menu.Popup += (_, _) => Guard.Run("Menu", () =>
             {
                 var hasDevice = SelectedDevices().Count > 0;
                 foreach (MenuItem item in _menu.MenuItems)
                 {
                     item.Visible = hasDevice;
                 }
-            };
+            });
             AcApp.AddObjectContextMenuExtension(Autodesk.AutoCAD.Runtime.RXObject.GetClass(typeof(BlockReference)), _menu);
         }
         catch (Exception ex)

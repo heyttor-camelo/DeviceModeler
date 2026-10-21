@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using Hydro.Civil3D.Infra;
 using Hydro.Core.Definition;
 using Hydro.Core.Errors;
 using CoreValues = Hydro.Core.Expressions.Values;
@@ -63,7 +64,7 @@ internal sealed class ParameterForm : Form
                 _devices.Items.Add(new Item(definition));
             }
 
-            _devices.SelectedIndexChanged += (_, _) => Select(((Item)_devices.SelectedItem!).Definition, null);
+            _devices.SelectedIndexChanged += (_, _) => Guard.Run("Janela de parâmetros", () => Select(((Item)_devices.SelectedItem!).Definition, null));
         }
         else
         {
@@ -71,12 +72,12 @@ internal sealed class ParameterForm : Form
         }
 
         Controls.Add(buttons);
-        _grid.PropertyValueChanged += (_, _) =>
+        _grid.PropertyValueChanged += (_, _) => Guard.Run("Janela de parâmetros", () =>
         {
             // um código de catálogo ou uma regra de ao_editar pode ter mudado outros parâmetros
             _grid.Refresh();
             UpdateSummary();
-        };
+        });
 
         if (catalogErrors is { Count: > 0 })
         {

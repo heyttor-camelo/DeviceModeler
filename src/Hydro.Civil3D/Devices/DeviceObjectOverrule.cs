@@ -1,4 +1,5 @@
 using Autodesk.AutoCAD.DatabaseServices;
+using Hydro.Civil3D.Infra;
 using Hydro.Civil3D.Persistence;
 
 namespace Hydro.Civil3D.Devices;
@@ -9,7 +10,8 @@ namespace Hydro.Civil3D.Devices;
 /// primeira edição. <c>Erase</c> avisa a fila para limpar quem depende do dispositivo (rótulos e
 /// projeções). Nada é refeito dentro do overrule. <c>WblockClone</c> (copiar para outro desenho)
 /// fica com o comportamento padrão: o registro vai junto e, no outro desenho, o dispositivo continua
-/// sendo dispositivo se a definição estiver no catálogo.</summary>
+/// sendo dispositivo se a definição estiver no catálogo. Não há recursão: o overrule chama o
+/// <c>base.DeepClone</c> uma vez e só enfileira; a fila do fim do comando não clona nada.</summary>
 internal sealed class DeviceObjectOverrule : ObjectOverrule
 {
     private static DeviceObjectOverrule? _instance;
@@ -43,10 +45,13 @@ internal sealed class DeviceObjectOverrule : ObjectOverrule
     {
         var clone = base.DeepClone(dbObject, ownerObject, idMap, isPrimary);
         // só cópias no mesmo desenho; dentro de definições de bloco (BEDIT, bloco nomeado) não
-        if (clone is BlockReference && isPrimary && clone.Database == dbObject.Database && ownerObject is BlockTableRecord { IsLayout: true })
+        Guard.Run("Cópia", () =>
         {
-            DeviceWatcher.QueueClone(clone);
-        }
+            if (clone is BlockReference && isPrimary && clone.Database == dbObject.Database && ownerObject is BlockTableRecord { IsLayout: true })
+            {
+                DeviceWatcher.QueueClone(clone);
+            }
+        });
 
         return clone;
     }
@@ -56,7 +61,7 @@ internal sealed class DeviceObjectOverrule : ObjectOverrule
         base.Erase(dbObject, erasing);
         if (erasing)
         {
-            DeviceWatcher.QueueErasedDevice(dbObject);
+            Guard.Run("Exclusão", () => DeviceWatcher.QueueErasedDevice(dbObject));
         }
     }
 }
