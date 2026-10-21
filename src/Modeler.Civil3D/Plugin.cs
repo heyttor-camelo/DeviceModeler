@@ -20,7 +20,10 @@ public sealed class Plugin : IExtensionApplication
     {
         HydroLog.Start();
         DeviceGripOverrule.Register();
-        PipeWatcher.Start();
+        DeviceWatcher.Start();
+        DeviceObjectOverrule.Register();
+        ConnectorSnap.Register();
+        DeviceInteraction.Start();
         HydroRibbon.Initialize();
         foreach (Document document in AcApp.DocumentManager)
         {
@@ -42,6 +45,8 @@ public sealed class Plugin : IExtensionApplication
     public void Terminate()
     {
         DeviceGripOverrule.Unregister();
+        DeviceObjectOverrule.Unregister();
+        DeviceInteraction.Stop();
         HydroRibbon.Terminate();
         HydroLog.Stop();
     }

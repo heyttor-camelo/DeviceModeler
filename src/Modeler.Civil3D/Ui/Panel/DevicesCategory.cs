@@ -31,10 +31,6 @@ internal sealed record DeviceItem(
 /// as abas Propriedades, Variáveis, Quantitativos, Conectores e Avisos.</summary>
 internal sealed class DevicesCategory : IPanelCategory
 {
-    /// <summary>Instâncias já avaliadas, por handle + parâmetros + hash da definição (o painel não
-    /// reavalia o que não mudou).</summary>
-    private static readonly Dictionary<string, (string Key, DeviceInstance Instance)> Evaluated = new(StringComparer.Ordinal);
-
     private List<PanelRow> _rows = new();
 
     public string Id => "DISPOSITIVOS";
@@ -70,8 +66,8 @@ internal sealed class DevicesCategory : IPanelCategory
             "Com a atualização automática ligada, mover a ponta de um tubo ligado refaz o dispositivo ao fim do comando.",
             Array.Empty<string>(), Menu: new[]
             {
-                new PanelMenuItem("Ligar", "DM_AUTO Ligar ", Checked: () => PipeWatcher.Enabled),
-                new PanelMenuItem("Desligar", "DM_AUTO Desligar ", Checked: () => !PipeWatcher.Enabled),
+                new PanelMenuItem("Ligar", "DM_AUTO Ligar ", Checked: () => DeviceWatcher.Enabled),
+                new PanelMenuItem("Desligar", "DM_AUTO Desligar ", Checked: () => !DeviceWatcher.Enabled),
             }),
         new PanelCommand("INFO", "Informações", "Saídas",
             "Parâmetros, variáveis, quantitativos, conectores e nó SWMM na linha de comando.",
@@ -121,11 +117,6 @@ internal sealed class DevicesCategory : IPanelCategory
         }
 
         tr.Commit();
-        var alive = _rows.Select(r => r.Id).ToHashSet();
-        foreach (var gone in Evaluated.Keys.Where(k => !alive.Contains(k)).ToList())
-        {
-            Evaluated.Remove(gone);
-        }
     }
 
     public IEnumerable<PanelTab> Tabs(IPanelHost host, PanelRow? row)
@@ -246,33 +237,14 @@ internal sealed class DevicesCategory : IPanelCategory
         var handle = reference.Handle.ToString();
         var record = DeviceRecord.TryRead(reference, tr)!;
         var placement = DeviceService.PlacementOf(reference);
-        try
+        var entry = InstanceCache.Get(tr, reference, out var error);
+        if (entry is null)
         {
-            var definition = Catalog.DeviceCatalog.Find(record.DefinitionId, record.SourceFile);
-            if (definition is null)
-            {
-                return new DeviceItem(handle, record.Name, record, null, null, placement, $"definição '{record.DefinitionId}' não encontrada no catálogo", false);
-            }
-
-            var key = definition.Hash + "|" + ParameterCodec.Serialize(record.Values);
-            DeviceInstance instance;
-            if (Evaluated.TryGetValue(handle, out var cached) && cached.Key == key)
-            {
-                instance = cached.Instance;
-            }
-            else
-            {
-                instance = definition.Evaluate(Core.Editing.DeviceEditing.Reconcile(definition, record.Values, out _));
-                Evaluated[handle] = (key, instance);
-            }
-
-            return new DeviceItem(handle, record.Name, record, definition, instance, placement, null, record.DefinitionHash != definition.Hash);
+            HydroLog.Warn("Painel", $"{record.Name}: {error}");
+            return new DeviceItem(handle, record.Name, record, null, null, placement, error, false);
         }
-        catch (Exception ex) when (ex is Core.Errors.ModelerException or InvalidOperationException)
-        {
-            HydroLog.Warn("Painel", $"{record.Name}: {ex.Message}");
-            return new DeviceItem(handle, record.Name, record, null, null, placement, ex.Message, false);
-        }
+
+        return new DeviceItem(handle, record.Name, record, entry.Definition, entry.Instance, placement, null, record.DefinitionHash != entry.Definition.Hash);
     }
 
     private static int ConnectionCount(DeviceInstance instance) =>
@@ -284,7 +256,7 @@ internal sealed class DevicesCategory : IPanelCategory
         var ui = new PanelUi(host.Theme).Section("Dispositivos no desenho")
             .Prop("Quantidade", _rows.Count.ToString(CultureInfo.InvariantCulture))
             .Prop("Com aviso ou erro", _rows.Count(r => r.Level > 0).ToString(CultureInfo.InvariantCulture))
-            .Prop("Atualização automática", PipeWatcher.Enabled ? "ligada" : "desligada");
+            .Prop("Atualização automática", DeviceWatcher.Enabled ? "ligada" : "desligada");
         foreach (var group in _rows.Select(r => (DeviceItem)r.Data!).GroupBy(i => i.Definition?.Name ?? i.Record.DefinitionId))
         {
             ui.Prop(group.Key, group.Count().ToString(CultureInfo.InvariantCulture));

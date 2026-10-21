@@ -7,24 +7,27 @@ namespace Modeler.Civil3D.Ui.Panel;
 /// <summary>As categorias do painel, na ordem da proposta (estudo B §6.1).</summary>
 internal static class Categories
 {
-    public static List<IPanelCategory> Create() => new()
+    public static List<IPanelCategory> Create()
     {
-        new ComingSoonCategory("REDES", "REDES", "Redes", "Redes",
-            "Redes do desenho (tipo, dispositivos, extensão e situação) e a planta esquemática de todas."),
-        new DevicesCategory(),
-        new ComingSoonCategory("BACIAS", "BACIAS", "Bacias", "Bacias",
-            "Bacias de contribuição: área, C, tempo de concentração e dispositivo de destino."),
-        new ComingSoonCategory("SETORES", "SETORES", "Setores", "Setores",
-            "Setores de consumo: população inicial e final, per capita e vazões."),
-        new ComingSoonCategory("VERIFICACAO", "VERIFICACAO", "Verificação", "Verificacao",
-            "Violações de regra e interferências, com marcadores na planta."),
-        new ComingSoonCategory("SAIDAS", "SAIDAS", "Saídas", "Saidas",
-            "Tabelas, rótulos e projeções em perfil dos dispositivos."),
-        new ComingSoonCategory("SIMULACAO", "SIMULACAO", "Simulação", "Simulacao",
-            "Itens do SWMM (curvas, séries, controles) e gráficos dos resultados."),
-        new CatalogCategory(),
-        new SettingsCategory(),
-    };
+        var devices = new DevicesCategory();
+        return new List<IPanelCategory>
+        {
+            new ComingSoonCategory("REDES", "REDES", "Redes", "Redes",
+                "Redes do desenho (tipo, dispositivos, extensão e situação) e a planta esquemática de todas."),
+            devices,
+            new ComingSoonCategory("BACIAS", "BACIAS", "Bacias", "Bacias",
+                "Bacias de contribuição: área, C, tempo de concentração e dispositivo de destino."),
+            new ComingSoonCategory("SETORES", "SETORES", "Setores", "Setores",
+                "Setores de consumo: população inicial e final, per capita e vazões."),
+            new AuditCategory(devices),
+            new ComingSoonCategory("SAIDAS", "SAIDAS", "Saídas", "Saidas",
+                "Tabelas, rótulos e projeções em perfil dos dispositivos."),
+            new ComingSoonCategory("SIMULACAO", "SIMULACAO", "Simulação", "Simulacao",
+                "Itens do SWMM (curvas, séries, controles) e gráficos dos resultados."),
+            new CatalogCategory(),
+            new SettingsCategory(),
+        };
+    }
 }
 
 /// <summary>Categoria ainda sem conteúdo: só o aviso "em breve" e o que ela vai mostrar.</summary>

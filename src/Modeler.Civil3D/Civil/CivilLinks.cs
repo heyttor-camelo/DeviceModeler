@@ -141,18 +141,30 @@ internal static class CivilLinks
         return changed;
     }
 
-    private static bool TryGetPipe(Transaction tr, Database db, string handle, out Pipe pipe)
+    private static bool TryGetPipe(Transaction tr, Database db, string handle, out Pipe pipe) => TryGet(tr, db, handle, out pipe);
+
+    public static bool TryGetSurface(Transaction tr, Database db, string handle, out CivilSurface surface) => TryGet(tr, db, handle, out surface);
+
+    /// <summary>Objeto do desenho pelo handle (texto hexadecimal); falso se não existir, estiver
+    /// apagado ou for de outro tipo.</summary>
+    public static bool TryGet<T>(Transaction tr, Database db, string handle, out T result)
+        where T : Autodesk.AutoCAD.DatabaseServices.DBObject
     {
-        pipe = null!;
+        result = null!;
+        if (string.IsNullOrEmpty(handle))
+        {
+            return false;
+        }
+
         try
         {
             var id = db.GetObjectId(false, new Handle(Convert.ToInt64(handle, 16)), 0);
-            if (id.IsNull || id.IsErased || tr.GetObject(id, OpenMode.ForRead) is not Pipe found)
+            if (id.IsNull || id.IsErased || tr.GetObject(id, OpenMode.ForRead) is not T found)
             {
                 return false;
             }
 
-            pipe = found;
+            result = found;
             return true;
         }
         catch (Exception)

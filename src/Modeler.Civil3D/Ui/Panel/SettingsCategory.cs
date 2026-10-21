@@ -43,7 +43,7 @@ internal sealed class SettingsCategory : IPanelCategory
         _rows = new List<PanelRow>
         {
             new("catalogo", "PASTA", new[] { "Pasta do catálogo", DeviceCatalog.Folder }, "catalogo"),
-            new("auto", "ATUALIZAR", new[] { "Atualização automática pelos tubos", PipeWatcher.Enabled ? "ligada" : "desligada" }, "auto"),
+            new("auto", "ATUALIZAR", new[] { "Atualização automática pelos tubos", DeviceWatcher.Enabled ? "ligada" : "desligada" }, "auto"),
             new("tema", "PAINEL", new[] { "Tema do painel", host.Theme.IsDark ? "escuro" : "claro" }, "tema"),
             new("log", "LOG", new[] { "Pasta do log", HydroLog.Folder }, "log"),
             new("versao", "INFO", new[] { "Versão", HydroLog.Environment() }, "versao"),

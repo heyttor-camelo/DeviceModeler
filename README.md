@@ -119,9 +119,16 @@ parametros:
 
 - Unidades aceitas: `m`, `m2` (`m²`), `m3` (`m³`), `m3/s`, `grau`, `un`, `kg`.
 - `min` e `max` são inclusivos e valem só para tipos numéricos. O `padrao` é validado já na carga.
-- **`grip`**: `x`, `y` ou `z`, ou um mapa `{eixo, posicao, fator}`. `posicao` é uma expressão
-  `[x, y, z]` sobre parâmetros e variáveis. Arrastar o grip uma distância *d* altera o parâmetro em
-  *d* × `fator` (use `fator: 2` para dimensões simétricas). Na instância, os grips ficam em `inst.Grips`.
+- **`grip`**: `x`, `y` ou `z`, ou um mapa `{tipo, eixo, posicao, fator, centro, sentido}`. `posicao` é
+  uma expressão `[x, y, z]` sobre parâmetros e variáveis. Na instância, os grips ficam em `inst.Grips`.
+  - `tipo: esticar` (padrão): arrastar o grip uma distância *d* no `eixo` altera o parâmetro em
+    *d* × `fator` (use `fator: 2` para dimensões simétricas). Desenho: seta verde.
+  - `tipo: rotacionar`: só para parâmetro `angulo`; gira em planta em torno de `centro` (padrão: a
+    origem, na elevação do grip). Desenho: círculo ciano ligado ao centro.
+  - `tipo: perfil`: anda só na vertical; `sentido: cima` (padrão) ou `baixo` (para cima diminui).
+    Aparece nas projeções em ProfileView (F4). Desenho: losango ciano.
+  - Os valores respeitam `min`/`max`/`valores` e passam por `DeviceEditing.Edit` (códigos de catálogo
+    e `ao_editar`).
 - **`alvo`** indica de onde a Fase 2 pode tirar o valor: `superficie`, `alinhamento`, `perfil`,
   `polilinha` ou `tubo`.
 - **Conexões:** `angulo` em graus, medido em planta a partir de +X local no sentido anti-horário;
@@ -464,9 +471,11 @@ para a série R25.1 (Civil 3D 2026).
 |---------|-----------|
 | `DM_INSERIR` | Abre uma janela com a lista do catálogo, o PropertyGrid dos parâmetros e um resumo que se recalcula a cada alteração (variáveis, quantitativos, avisos e erros; o OK só é habilitado quando tudo é válido). Depois pede o ponto e a rotação com jig e, se a definição tiver `alvo: superficie`, a superfície da cota da tampa |
 | `DM_EDITAR` | Mesma janela, com os valores atuais; regenera ao confirmar |
-| *grips* | Cada parâmetro com `grip:` ganha um grip. Clicar nele inicia `DM_GRIP`, que pede o novo ponto e aplica fator e min/max |
+| *grips* | Cada parâmetro com `grip:` ganha um grip (seta, círculo de rotação ou losango de perfil). Arraste: a prévia em aramado e o valor aparecem durante o arrasto, e o dispositivo se refaz ao soltar |
 | `DM_CONECTAR` | Liga tubos de Pipe Network ao dispositivo (substitui ou adiciona). Preenche `Conexoes` (ângulo, cota de fundo, diâmetros interno e externo, handle) e os parâmetros com `alvo: tubo` (menor cota de fundo). O PV abre os furos e cria os conectores |
-| `DM_SUPERFICIE` | Parâmetros com `alvo: superficie` passam a valer a cota da superfície no ponto de inserção |
+| `DM_SUPERFICIE` | Parâmetros com `alvo: superficie` passam a valer a elevação da superfície no ponto de inserção. Com "Acompanhar" (padrão), a elevação é refeita quando a superfície mudar |
+| `DM_AUDITAR` | Lista os problemas dos dispositivos (esquema antigo, YAML ausente ou alterado, bloco compartilhado, nome ou id repetido, conexão para tubo apagado, superfície apagada) e oferece as correções automáticas. A categoria Verificação do painel mostra a mesma lista |
+| `DM_OSNAP` | Liga ou desliga o osnap de conector |
 | `DM_ATUALIZAR` | Relê os tubos (pelo handle) e o catálogo e regenera; avisa quando a definição mudou (hash) |
 | `DM_AUTO` | Liga ou desliga a atualização automática: se um tubo ligado mudar, o dispositivo se refaz ao fim do comando |
 | `DM_QUANTITATIVOS` | Totais por quantitativo na linha de comando, mais CSV detalhado (`;`) |
@@ -513,7 +522,10 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
   existir um com esse nome no desenho. Sem o plugin, o desenho continua válido: é um bloco comum.
 - **Dados:** Xrecord `DEVICEMODELER` no dicionário de extensão da referência, com marcador, versão
   do esquema, id, versão e hash da definição, caminho do YAML, nome da instância e os parâmetros em
-  JSON (`ParameterCodec`), em pedaços com código 300.
+  JSON (`ParameterCodec`), em pedaços com código 300. O **esquema 2** acrescenta um JSON de
+  metadados (código 301): id da instância (GUID), superfície seguida e a impressão digital dela,
+  número e rede. O esquema 1 continua legível e migra na próxima gravação (ou no `DM_AUDITAR`). O
+  dicionário de objetos nomeados guarda `DEVICEMODELER_VERSAO` (versão do HYDRO e do esquema).
 - **Posição:** o bloco tem origem 0, e as coordenadas do bloco são o sistema local do dispositivo
   (Z = cota). Mover e girar a referência é suficiente.
 - **Regeneração** (`DeviceService.Regenerate`):
@@ -521,12 +533,28 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
   - se a referência foi deslocada em Z, soma o deslocamento às cotas e zera o Z;
   - restaura escala 1;
   - apaga o conteúdo do bloco e o recria. Se o bloco for compartilhado por cópias (COPY/ARRAY),
-    a referência editada ganha um bloco novo antes.
+    a referência editada ganha um bloco novo antes;
+  - **por impacto:** se só mudaram parâmetros que não chegam aos sólidos (`GeometryParameters`, uma
+    análise estática para trás pelo fluxo — folga de escavação, lastro...), o bloco fica e só o
+    registro é regravado.
 - **Grips:** um `GripOverrule` registrado em `BlockReference`, filtrado pelo dicionário de extensão
-  (`SetExtensionDictionaryEntryFilter`). A geometria nunca é refeita dentro do overrule: o clique
-  no grip dispara o comando `DM_GRIP`.
-- **Tubos:** `ObjectModified` só enfileira o handle do tubo; o processamento acontece em
-  `CommandEnded`, com o documento travado, ignorando UNDO/REDO e os próprios comandos.
+  (`SetExtensionDictionaryEntryFilter`), com o desenho dos grips do SOLIDOS: seta verde (ACI 3),
+  círculo ciano (ACI 4) ou losango ciano, todos com contorno ACI 7 e tamanho pelo `GRIPSIZE`. Cores
+  fixas, como no SOLIDOS (ele não usa `GRIPCOLOR`/`GRIPHOT`). Ao arrastar, o grip desenha a prévia
+  em aramado (avaliação do Core, sem ACIS) e o valor; ao soltar, a edição vai para a fila e o
+  dispositivo se refaz no fim do `GRIP_STRETCH`. A geometria nunca é refeita dentro do overrule.
+- **Fila no fim do comando** (`DeviceWatcher`): os eventos e overrules só enfileiram; no
+  `CommandEnded`, com o documento travado, as fases rodam em ordem: grips → cópias → tubos apagados
+  → tubos alterados → superfícies alteradas → dependentes de dispositivos apagados. Ignora UNDO/REDO.
+- **Cópias e exclusões** (`DeviceObjectOverrule`): o `DeepClone` enfileira a cópia, que no fim do
+  comando ganha bloco próprio, id e nome novos (pelo `modelos.nome`). O `Erase` avisa a fila.
+- **Superfície seguida:** `DM_SUPERFICIE` grava a superfície e o `ComputeFingerPrint()` dela; se a
+  superfície mudar (`ObjectModified`) e a impressão digital for outra, a elevação é refeita.
+- **Osnap de conector** (`DM_OSNAP`): `CustomObjectSnapMode` que prende o cursor nos conectores
+  (glifo: quadrado magenta com círculo).
+- **Dica e menu:** ao parar o cursor sobre um dispositivo aparece o `modelos.dica` (ou nome e
+  código) e os avisos; o botão direito traz Editar, Conectar, Atualizar, Informações e Mostrar no
+  painel.
 
 ### Testes
 
@@ -541,7 +569,9 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
 2. `DM_INSERIR` → PV retangular → mude `CotaTampa` para 103 e veja o resumo recalcular. Ponha
    `L = 5`: o PropertyGrid recusa. Clique em OK, escolha o ponto e a rotação, pule a superfície.
 3. Confira as camadas `DM-CONCRETO`, `DM-DEGRAUS` (H > 2 m) e `DM-TAMPA`.
-4. Selecione o PV, clique no grip de `L` e arraste: o PV se refaz com o novo comprimento.
+4. Selecione o PV: os grips de `L`, `B` e `CotaTampa` aparecem como setas verdes com contorno. Arraste
+   o de `L`: o aramado amarelo e o valor acompanham o cursor; ao soltar, o PV se refaz. Esc no meio
+   do arrasto não muda nada.
 5. Desenhe uma rede de tubos chegando ao PV e rode `DM_CONECTAR`: aparecem os furos e
    `CotaFundo` passa a valer a menor cota de fundo.
 6. Mova a ponta de um tubo: com `DM_AUTO` ligado, o furo acompanha.
@@ -555,6 +585,18 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
     a lista (marcação com espaço, botão direito, duplo clique leva ao dispositivo) e as abas. Troque
     o tema em Preferências e confira que **Esc não fecha** o painel. Ctrl+Shift+L abre o log.
 12. **Ribbon:** a aba HYDRO tem um botão por categoria; cada um abre o painel na categoria.
+13. **Cópias:** `COPY` de um PV: no fim do comando a cópia ganha nome novo (PV-2...) e bloco
+    próprio (`DM_AUDITAR` não acusa bloco compartilhado). Apague um tubo ligado: a conexão sai e o
+    furo some no fim do comando.
+14. **Superfície:** `DM_SUPERFICIE` com Acompanhar; edite a superfície (suba um ponto): a tampa
+    acompanha no fim do comando.
+15. **Osnap e dica:** `DM_OSNAP Ligar`; desenhe uma linha e passe perto de um conector: o glifo
+    magenta aparece. Pare o cursor sobre o PV: a dica mostra o `modelos.dica`. Botão direito sobre
+    o PV selecionado: o grupo HYDRO tem Editar, Conectar, Atualizar, Informações e Mostrar no painel.
+16. **Boca de bueiro:** insira `boca_bueiro`, gire a ala pelo grip circular (ciano) e confira o corte
+    em rampa do topo das alas (`cortar`). Troque Tipo para Triplo e veja os três furos e conectores.
+17. **Auditoria:** `DM_AUDITAR` num desenho com dispositivos da versão anterior: acusa esquema 1 e
+    migra com Corrigir.
 
 ### Limitações atuais e próximos passos
 

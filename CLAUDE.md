@@ -93,10 +93,16 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
   - Posição e rotação ficam no transform do bloco.
   - Regeneração: `DeviceEditing.Reconcile`, deslocamento em Z vira soma nas cotas, escala volta a 1,
     o conteúdo do bloco é apagado e recriado, e um bloco compartilhado por cópia é separado.
-- **Grips:** `GripOverrule` em BlockReference com `SetExtensionDictionaryEntryFilter`. O clique no
-  grip só agenda o comando `DM_GRIP`: **nunca refaça geometria dentro do overrule**.
-- **Tubos (`PipeWatcher`):** `ObjectModified` só enfileira handles; o processamento é no
-  `CommandEnded`, com `LockDocument`, ignorando UNDO/REDO e os próprios DM_*.
+    Se só mudaram parâmetros fora de `GeometryParameters` (análise de impacto), o bloco fica.
+- **Grips:** `GripOverrule` em BlockReference com `SetExtensionDictionaryEntryFilter`, com o desenho
+  dos grips do SOLIDOS (seta verde ACI 3, círculo ACI 4, losango ACI 4, contorno ACI 7, cores fixas).
+  Mudança de out/2026 (pedido do usuário: grips iguais aos do SOLIDOS, com prévia): o `DM_GRIP` saiu;
+  `MoveGripPointsAt` só calcula o valor e o aramado da prévia (Core, sem ACIS) e o `GripEnd` põe a
+  edição na fila. **Continua valendo: nunca refaça geometria dentro do overrule.**
+- **Fila no fim do comando (`DeviceWatcher`, antes `PipeWatcher`):** `ObjectModified`,
+  `ObjectErased`, o `DeepClone` e os grips só enfileiram; o processamento é no `CommandEnded`, com
+  `LockDocument`, em fases (grips → cópias → tubos apagados → tubos → superfícies → dependentes),
+  ignorando UNDO/REDO. Tubos e superfícies são ignorados no fim dos próprios DM_*.
 - **Conexões:** `{nome, angulo, cota (geratriz inferior interna), diametro (interno),
   diametro_externo, ref (handle do tubo)}`. O furo do PV usa `diametro_externo + 0.10`, centrado em
   `cota + diametro/2`.
@@ -134,7 +140,7 @@ O que se aprendeu:
 - Quantitativos: concreto, fôrma, escavação, lastro e degraus.
 
 **Fase 2, implementada:** compila sem avisos, mas **ainda não foi testada no Civil 3D**.
-- Comandos: DM_INSERIR, DM_EDITAR, DM_GRIP, DM_CONECTAR, DM_SUPERFICIE, DM_ATUALIZAR, DM_AUTO,
+- Comandos: DM_INSERIR, DM_EDITAR, DM_CONECTAR, DM_SUPERFICIE, DM_ATUALIZAR, DM_AUTO,
   DM_QUANTITATIVOS, DM_SWMM, DM_INFO e DM_CATALOGO.
 - Janela com PropertyGrid e resumo ao vivo, jig de inserção e bundle de autoload.
 
@@ -153,9 +159,20 @@ O que se aprendeu:
 - `familia`, `subtipo`, `codigo` (vira o nome `codigo`), `modelos.nome`/`modelos.dica`.
 - Motor de macros `Text/Template` + `FormatSpec` (`{H:m:3}`, pt-BR, sem litros).
 - `predefinicoes` e `ao_editar`/`editado()`, aplicados por `DeviceEditing.Edit` (janela de
-  parâmetros, DM_GRIP e alvos tubo/superfície passam por ele).
+  parâmetros, os grips e os alvos tubo/superfície passam por ele).
 - Catálogo: `catalog/drenagem/` com caixa de ligação, boca de bueiro e boca de lobo simples.
 - `cortar` no plugin usa `Solid3d.Slice` e confere o lado pelo centroide (não testado no CAD).
+
+**HYDRO F2 (comportamento no DWG), implementada, não testada no CAD:**
+- Regeneração por impacto (`DeviceDefinition.GeometryParameters`/`ChangesGeometry`).
+- Grips iguais aos do SOLIDOS com prévia em aramado (`Wireframe` no Core); tipos `esticar`,
+  `rotacionar` (parâmetro angulo, com `centro`) e `perfil` (só nas projeções, F4).
+- `DeviceObjectOverrule` (DeepClone → bloco, id e nome novos no fim do comando; Erase → fila).
+- Superfície seguida por `ComputeFingerPrint()` (ulong) gravado no registro.
+- `DeviceRecord` esquema 2 (metadados JSON código 301: id GUID, superfície, número, rede) e
+  `DEVICEMODELER_VERSAO` no NOD; `DM_AUDITAR` (lista e corrige) e categoria Verificação no painel.
+- Osnap de conector (`ConnectorSnap`, `DM_OSNAP`), dica no cursor (`modelos.dica`) e menu de
+  contexto HYDRO (`DeviceInteraction`). `InstanceCache` compartilhado (painel, dica, osnap, grips).
 
 **Padrão de interface:** o painel do Viário (github.com/heyttor-camelo/Civil3D2026Plugin,
 `docs/DEVELOPMENT.md` §8). Esc nunca fecha janela; ícones vetoriais 32×32 com cores de significado;

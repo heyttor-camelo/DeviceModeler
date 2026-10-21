@@ -87,6 +87,7 @@ parametros:
     min: 0
     max: 60
     rotulo: Abertura das alas (a partir do eixo)
+    grip: { tipo: rotacionar, posicao: "[0.6 * x_fim, w_in + 0.6 * CompAla * sin(a), CotaTopo]", centro: "[0, w_in, CotaTopo]" }
     grupo: Geometria
   AlturaFim:
     tipo: comprimento

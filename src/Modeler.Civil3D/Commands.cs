@@ -45,6 +45,8 @@ public sealed class Commands
         ("DM_INFO", "mostra parâmetros, variáveis, quantitativos e conectores de um dispositivo"),
         ("DM_CATALOGO", "mostra/troca a pasta do catálogo e lista as definições"),
         ("DM_AUTO", "liga/desliga a atualização automática quando tubos ligados mudam"),
+        ("DM_AUDITAR", "audita os dispositivos do desenho e corrige o que tiver correção automática"),
+        ("DM_OSNAP", "liga/desliga o osnap de conector"),
         ("DM_IR", "seleciona e enquadra um dispositivo pelo handle (usado pelo painel)"),
         ("C3DHYDRO", "abre o painel HYDRO (C3DHYDRO <categoria> abre direto nela)"),
     };
@@ -52,15 +54,15 @@ public sealed class Commands
     [CommandMethod("DeviceModeler", "DM_AUTO", CommandFlags.Modal)]
     public void Auto() => Run(() =>
     {
-        var options = new PromptKeywordOptions($"\nAtualização automática pelos tubos está {(PipeWatcher.Enabled ? "LIGADA" : "DESLIGADA")} [Ligar/Desligar]: ", "Ligar Desligar")
+        var options = new PromptKeywordOptions($"\nAtualização automática pelos tubos está {(DeviceWatcher.Enabled ? "LIGADA" : "DESLIGADA")} [Ligar/Desligar]: ", "Ligar Desligar")
         {
             AllowNone = true,
         };
         var result = Ed.GetKeywords(options);
         if (result.Status == PromptStatus.OK)
         {
-            PipeWatcher.Enabled = result.StringResult == "Ligar";
-            Ed.WriteMessage($"\nAtualização automática {(PipeWatcher.Enabled ? "ligada" : "desligada")}.");
+            DeviceWatcher.Enabled = result.StringResult == "Ligar";
+            Ed.WriteMessage($"\nAtualização automática {(DeviceWatcher.Enabled ? "ligada" : "desligada")}.");
         }
     });
 
@@ -151,45 +153,6 @@ public sealed class Commands
         HydroPanel.Reveal("DISPOSITIVOS", id.Handle.ToString());
     });
 
-    /// <summary>Disparado pelo clique num grip de parâmetro (ver <see cref="DeviceGripOverrule"/>).</summary>
-    [CommandMethod("DeviceModeler", "DM_GRIP", CommandFlags.Modal | CommandFlags.NoHistory)]
-    public void Grip() => Run(() =>
-    {
-        if (DeviceGripOverrule.Pending is not { } pending)
-        {
-            return;
-        }
-
-        DeviceGripOverrule.Pending = null;
-        using var tr = Db.TransactionManager.StartTransaction();
-        var reference = (BlockReference)tr.GetObject(pending.Entity, OpenMode.ForRead);
-        var (record, definition, instance) = DeviceService.Load(tr, reference);
-        var parameter = definition.FindParameter(pending.Parameter)!;
-        var current = (double)instance.Parameters[parameter.Name];
-
-        var options = new PromptPointOptions($"\nNovo ponto para {parameter.Label ?? parameter.Name} (atual {current:0.###} {parameter.Unit}): ")
-        {
-            BasePoint = pending.Point,
-            UseBasePoint = true,
-            UseDashedLine = true,
-        };
-        var result = Ed.GetPoint(options);
-        if (result.Status != PromptStatus.OK)
-        {
-            return;
-        }
-
-        var placement = DeviceService.PlacementOf(reference);
-        var delta = Solid3dBuilder.ToVec3(Point3d.Origin + (result.Value - pending.Point));
-        var localDelta = placement.DirectionToLocal(delta);
-        var value = DeviceEditing.GripValue(parameter, current, localDelta);
-        var values = DeviceEditing.Edit(definition, instance.Parameters, parameter.Name, value, out var editMessages);
-        Report(record.Name, editMessages);
-        Report(record.Name, DeviceService.Regenerate(tr, reference, definition, record, values));
-        Ed.WriteMessage($"\n{parameter.Name} = {value:0.###} {parameter.Unit}");
-        tr.Commit();
-    });
-
     [CommandMethod("DeviceModeler", "DM_CONECTAR", CommandFlags.Modal)]
     public void Connect() => Run(() =>
     {
@@ -244,9 +207,15 @@ public sealed class Commands
     {
         var devices = PickDevices("\nSelecione os dispositivos <Enter = todos>: ");
         var surfaceId = PickSurface(optional: false);
-        if (!surfaceId.IsNull)
+        if (surfaceId.IsNull)
         {
-            ApplySurface(devices, surfaceId);
+            return;
+        }
+
+        var follow = Ed.GetKeywords(new PromptKeywordOptions("\nAcompanhar a superfície quando ela mudar? [Sim/Não] <Sim>: ", "Sim Não") { AllowNone = true });
+        if (follow.Status is PromptStatus.OK or PromptStatus.None)
+        {
+            ApplySurface(devices, surfaceId, follow.StringResult != "Não");
         }
     });
 
@@ -538,7 +507,9 @@ public sealed class Commands
         return result.Status == PromptStatus.OK ? result.ObjectId : ObjectId.Null;
     }
 
-    private static void ApplySurface(IEnumerable<ObjectId> devices, ObjectId surfaceId)
+    /// <param name="follow">grava a superfície e a impressão digital dela no registro: quando a
+    /// superfície mudar, o <see cref="DeviceWatcher"/> refaz a elevação no fim do comando.</param>
+    private static void ApplySurface(IEnumerable<ObjectId> devices, ObjectId surfaceId, bool follow = true)
     {
         using var tr = Db.TransactionManager.StartTransaction();
         var surface = (CivilSurface)tr.GetObject(surfaceId, OpenMode.ForRead);
@@ -552,8 +523,11 @@ public sealed class Commands
             {
                 if (CivilLinks.ApplySurface(definition, values, surface, DeviceService.PlacementOf(reference), messages))
                 {
+                    record.FollowSurface = follow;
+                    record.SurfaceHandle = surface.Handle.ToString();
+                    record.SurfaceFingerprint = surface.ComputeFingerPrint().ToString(System.Globalization.CultureInfo.InvariantCulture);
                     messages.AddRange(DeviceService.Regenerate(tr, reference, definition, record, values));
-                    messages.Add($"ajustado à superfície {surface.Name}");
+                    messages.Add($"ajustado à superfície {surface.Name}{(follow ? " (acompanhando)" : "")}");
                 }
             }
             catch (ModelerException ex)
