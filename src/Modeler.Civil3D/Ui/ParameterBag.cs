@@ -140,9 +140,9 @@ internal sealed class ParameterBag : CustomTypeDescriptor
                 bag.LastEdited = _parameter.Name;
                 bag.LastMessages = messages;
             }
-            catch (ParameterValidationException ex)
+            catch (ModelerException ex)
             {
-                // o PropertyGrid mostra a mensagem e mantém o valor anterior
+                // o PropertyGrid mostra a mensagem e mantém o valor anterior (inclui erro numa regra de ao_editar)
                 throw new ArgumentException(ex.Reason, ex);
             }
         }

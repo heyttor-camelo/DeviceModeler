@@ -65,6 +65,10 @@ internal static class Projections
 
         Fill(tr, db, block, device, view, record);
         projection.UpgradeOpen();
+        // a projeção é desenhada em coordenadas da vista: um MOVE/ROTATE/SCALE nela é desfeito
+        projection.Position = Point3d.Origin;
+        projection.Rotation = 0;
+        projection.ScaleFactors = new Scale3d(1);
         record.Write(projection, tr);
         projection.RecordGraphicsModified(true);
         return true;

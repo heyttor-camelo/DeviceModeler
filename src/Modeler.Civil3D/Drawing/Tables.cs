@@ -78,7 +78,14 @@ internal static class Tables
             var title = record.Title.Length > 0 ? record.Title : $"Dispositivos ({rows.Count})";
             if (columns > 1)
             {
-                table.MergeCells(CellRange.Create(table, 0, 0, 0, columns - 1));
+                try
+                {
+                    table.MergeCells(CellRange.Create(table, 0, 0, 0, columns - 1));
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception)
+                {
+                    // já mesclada (atualização): fica como está
+                }
             }
 
             table.Cells[0, 0].TextString = title;

@@ -234,10 +234,19 @@ public sealed class Commands
         var devices = PickDevices("\nSelecione os dispositivos <Enter = todos>: ");
         using var tr = Db.TransactionManager.StartTransaction();
         var updated = 0;
+        var index = 0;
+        using var progress = Ui.Common.ProgressWindow.Open("HYDRO — atualizar dispositivos", null);
         foreach (var id in devices)
         {
+            if (Infra.Progress.Cancelled)
+            {
+                Ed.WriteMessage("\nCancelado: os dispositivos já atualizados ficam.");
+                break;
+            }
+
             var reference = (BlockReference)tr.GetObject(id, OpenMode.ForRead);
             var record = DeviceRecord.TryRead(reference, tr)!;
+            Infra.Progress.Step(record.Name, index++, devices.Count);
             try
             {
                 var (_, definition, instance) = DeviceService.Load(tr, reference);

@@ -21,8 +21,12 @@ internal static class OutputsUpdater
     public static int UpdateAll(Transaction tr, Database db)
     {
         var count = 0;
-        foreach (var (entity, record) in OutputRecord.All(tr, db))
+        var outputs = OutputRecord.All(tr, db);
+        using var progress = Ui.Common.ProgressWindow.Open("HYDRO — atualizar saídas", null);
+        for (var i = 0; i < outputs.Count && !Progress.Cancelled; i++)
         {
+            var (entity, record) = outputs[i];
+            Progress.Step(record.Kind + " " + entity.Handle, i, outputs.Count);
             if (Update(tr, db, entity, record))
             {
                 count++;
