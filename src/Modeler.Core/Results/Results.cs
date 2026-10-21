@@ -26,7 +26,16 @@ public sealed record Quantity(string Name, double Value, string Unit, string? De
 
 /// <summary>Grip de edição: arrastar a partir de <paramref name="Position"/> ao longo de
 /// <paramref name="Direction"/> altera <paramref name="Parameter"/> em deslocamento × <paramref name="Factor"/>.</summary>
-public sealed record GripInstance(string Parameter, Vec3 Position, Vec3 Direction, double Factor);
+public sealed record GripInstance(string Parameter, Vec3 Position, Vec3 Direction, double Factor)
+{
+    public Definition.GripKind Kind { get; init; } = Definition.GripKind.Esticar;
+
+    /// <summary>Centro da rotação (grip de rotação); igual à posição nos outros.</summary>
+    public Vec3 Center { get; init; }
+
+    /// <summary>Grip de perfil: para cima aumenta o valor.</summary>
+    public bool Up { get; init; } = true;
+}
 
 /// <summary>Conexão de tubo informada ao avaliar (na Fase 2 vem dos tubos ligados).
 /// Ângulo em graus (planta, a partir de +X local, anti-horário) apontando do dispositivo para o tubo;

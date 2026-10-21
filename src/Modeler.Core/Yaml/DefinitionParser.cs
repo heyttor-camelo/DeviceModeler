@@ -106,6 +106,11 @@ internal sealed partial class DefinitionParser
             {
                 CheckNames(gripPosition, globals);
             }
+
+            if (parameter.Grip?.Center is { } gripCenter)
+            {
+                CheckNames(gripCenter, globals);
+            }
         }
 
         if (fields.TryGetValue("codigo", out var codeNode))
@@ -316,7 +321,7 @@ internal sealed partial class DefinitionParser
             }
 
             parameter.Default = ParseDefault(parameter, fields.GetValueOrDefault("padrao"), map, field);
-            parameter.Grip = fields.TryGetValue("grip", out var gripNode) ? ParseGrip(gripNode, field + ".grip") : null;
+            parameter.Grip = fields.TryGetValue("grip", out var gripNode) ? ParseGrip(gripNode, field + ".grip", type) : null;
             parameter.Target = fields.TryGetValue("alvo", out var targetNode) ? ParseTarget(targetNode, field + ".alvo") : TargetKind.Nenhum;
 
             if (result.Any(x => x.Name == name))
@@ -440,21 +445,66 @@ internal sealed partial class DefinitionParser
         };
     }
 
-    private GripDef ParseGrip(YamlNode node, string field)
+    private GripDef ParseGrip(YamlNode node, string field, ParameterType type)
     {
         if (node is YamlScalarNode)
         {
             return new GripDef(ParseAxis(node, field), null, 1);
         }
 
-        var fields = Fields(Map(node, field), field, "eixo", "posicao", "fator");
-        var axisNode = fields.GetValueOrDefault("eixo") ?? throw Missing((YamlMappingNode)node, "eixo", field);
-        return new GripDef(
-            ParseAxis(axisNode, field + ".eixo"),
-            fields.TryGetValue("posicao", out var position) ? Expr(position, field + ".posicao") : null,
-            fields.TryGetValue("fator", out var factor) ? Number(factor, field + ".fator") : 1);
-    }
+        var map = Map(node, field);
+        var fields = Fields(map, field, "tipo", "eixo", "posicao", "fator", "centro", "sentido");
+        var kind = fields.TryGetValue("tipo", out var kindNode)
+            ? Normalize(Scalar(kindNode, field + ".tipo")) switch
+            {
+                "esticar" => GripKind.Esticar,
+                "rotacionar" or "girar" => GripKind.Rotacionar,
+                "perfil" => GripKind.Perfil,
+                var other => throw new DefinitionException($"tipo de grip '{other}' inválido; use esticar, rotacionar ou perfil", Loc(kindNode), field + ".tipo"),
+            }
+            : GripKind.Esticar;
+        var position = fields.TryGetValue("posicao", out var positionNode) ? Expr(positionNode, field + ".posicao") : null;
+        var factor = fields.TryGetValue("fator", out var factorNode) ? Number(factorNode, field + ".fator") : 1;
+        void Forbid(string key, string reason)
+        {
+            if (fields.TryGetValue(key, out var invalid))
+            {
+                throw new DefinitionException($"'{key}' não se aplica a grip {reason}", Loc(invalid), $"{field}.{key}");
+            }
+        }
 
+        switch (kind)
+        {
+            case GripKind.Rotacionar:
+                Forbid("eixo", "de rotação (gira em planta)");
+                Forbid("sentido", "de rotação");
+                if (type != ParameterType.Angulo)
+                {
+                    throw new DefinitionException("grip de rotação só vale para parâmetro do tipo angulo", Loc(map), field);
+                }
+
+                return new GripDef("z", position ?? throw Missing(map, "posicao", field), factor)
+                {
+                    Kind = kind,
+                    Center = fields.TryGetValue("centro", out var centerNode) ? Expr(centerNode, field + ".centro") : null,
+                };
+            case GripKind.Perfil:
+                Forbid("eixo", "de perfil (anda na vertical)");
+                Forbid("centro", "de perfil");
+                var up = !fields.TryGetValue("sentido", out var directionNode) || Normalize(Scalar(directionNode, field + ".sentido")) switch
+                {
+                    "cima" => true,
+                    "baixo" => false,
+                    var other => throw new DefinitionException($"sentido '{other}' inválido; use cima ou baixo", Loc(directionNode), field + ".sentido"),
+                };
+                return new GripDef("z", position, factor) { Kind = kind, Up = up };
+            default:
+                Forbid("centro", "de esticar");
+                Forbid("sentido", "de esticar");
+                var axisNode = fields.GetValueOrDefault("eixo") ?? throw Missing(map, "eixo", field);
+                return new GripDef(ParseAxis(axisNode, field + ".eixo"), position, factor);
+        }
+    }
     private string ParseAxis(YamlNode node, string field)
     {
         var axis = Scalar(node, field).Trim().ToLowerInvariant();

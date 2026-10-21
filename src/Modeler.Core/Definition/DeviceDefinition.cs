@@ -67,6 +67,19 @@ public sealed class DeviceDefinition
 
     public ParameterDef? FindParameter(string name) => Parameters.FirstOrDefault(p => p.Name == name);
 
+    private IReadOnlySet<string>? _geometryParameters;
+
+    /// <summary>Parâmetros que chegam aos sólidos de saída (ver <see cref="ImpactAnalysis"/>). Mudar
+    /// só os demais não exige refazer a geometria.</summary>
+    public IReadOnlySet<string> GeometryParameters => _geometryParameters ??= ImpactAnalysis.GeometryParameters(this);
+
+    /// <summary>Verdadeiro se a troca de <paramref name="before"/> para <paramref name="after"/> muda algum
+    /// parâmetro geométrico.</summary>
+    public bool ChangesGeometry(IReadOnlyDictionary<string, object> before, IReadOnlyDictionary<string, object> after) =>
+        GeometryParameters.Any(name =>
+            !before.TryGetValue(name, out var a) || !after.TryGetValue(name, out var b) ||
+            Persistence.ParameterCodec.Serialize(new Dictionary<string, object> { [name] = a }) != Persistence.ParameterCodec.Serialize(new Dictionary<string, object> { [name] = b }));
+
     /// <summary>Avalia uma instância. Parâmetros omitidos usam o padrão. Lança
     /// <see cref="Errors.ParameterValidationException"/> ou <see cref="Errors.EvaluationException"/>.</summary>
     /// <param name="edited">parâmetro editado por último (paleta ou grip), visto por <c>editado()</c>.</param>

@@ -44,7 +44,25 @@ public enum TargetKind
 }
 
 /// <summary>Grip linear ligado a um parâmetro. <see cref="Position"/> é avaliada com os valores da instância.</summary>
-public sealed record GripDef(string Axis, Expression? Position, double Factor);
+public sealed record GripDef(string Axis, Expression? Position, double Factor)
+{
+    public GripKind Kind { get; init; } = GripKind.Esticar;
+
+    /// <summary>Centro da rotação (<c>tipo: rotacionar</c>); nulo = a origem, na elevação do grip.</summary>
+    public Expression? Center { get; init; }
+
+    /// <summary>Grip de perfil: arrastar para cima aumenta o valor (falso: para baixo aumenta).</summary>
+    public bool Up { get; init; } = true;
+}
+
+/// <summary>Tipo do grip, com o desenho do SOLIDOS: esticar = seta verde na direção; rotacionar =
+/// círculo ciano ligado ao centro; perfil = losango ciano que só anda na vertical (vista de perfil).</summary>
+public enum GripKind
+{
+    Esticar,
+    Rotacionar,
+    Perfil,
+}
 
 /// <summary>Declaração de um parâmetro de entrada.</summary>
 public sealed class ParameterDef

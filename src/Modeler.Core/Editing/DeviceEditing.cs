@@ -3,6 +3,7 @@ using Modeler.Core.Definition;
 using Modeler.Core.Errors;
 using Modeler.Core.Expressions;
 using Modeler.Core.Flow;
+using Modeler.Core.Results;
 
 namespace Modeler.Core.Editing;
 
@@ -13,17 +14,33 @@ public static class DeviceEditing
     /// <summary>Novo valor de um parâmetro após arrastar seu grip de <paramref name="localDelta"/>
     /// (no sistema local). Projeta o deslocamento no eixo do grip, multiplica pelo fator,
     /// respeita min/max e, havendo lista de valores, escolhe o valor permitido mais próximo.</summary>
-    public static double GripValue(ParameterDef parameter, double current, Vec3 localDelta)
+    public static double GripValue(ParameterDef parameter, double current, Vec3 localDelta, GripInstance? instance = null)
     {
         var grip = parameter.Grip ?? throw new InvalidOperationException($"parâmetro '{parameter.Name}' não tem grip");
-        var axis = grip.Axis switch
+        double change;
+        switch (grip.Kind)
         {
-            "x" => localDelta.X,
-            "y" => localDelta.Y,
-            _ => localDelta.Z,
-        };
+            case GripKind.Rotacionar when instance is not null:
+                // ângulo em planta entre (grip − centro) e (grip + deslocamento − centro), anti-horário
+                var (ax, ay) = (instance.Position.X - instance.Center.X, instance.Position.Y - instance.Center.Y);
+                var (bx, by) = (ax + localDelta.X, ay + localDelta.Y);
+                change = Math.Atan2((ax * by) - (ay * bx), (ax * bx) + (ay * by)) * 180 / Math.PI * grip.Factor;
+                break;
+            case GripKind.Perfil:
+                change = localDelta.Z * grip.Factor * (grip.Up ? 1 : -1);
+                break;
+            default:
+                var axis = grip.Axis switch
+                {
+                    "x" => localDelta.X,
+                    "y" => localDelta.Y,
+                    _ => localDelta.Z,
+                };
+                change = axis * grip.Factor;
+                break;
+        }
 
-        var value = current + (axis * grip.Factor);
+        var value = current + change;
         if (parameter.Min is { } min)
         {
             value = Math.Max(min, value);

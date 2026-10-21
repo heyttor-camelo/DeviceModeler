@@ -263,7 +263,9 @@ internal static class DeviceEvaluator
                 "y" => Vec3.UnitY,
                 _ => Vec3.UnitZ,
             };
-            grips.Add(new GripInstance(parameter.Name, position, direction, grip.Factor));
+            var center = grip.Kind != GripKind.Rotacionar ? position
+                : grip.Center is null ? new Vec3(0, 0, position.Z) : Vector(grip.Center, scope, "centro do grip");
+            grips.Add(new GripInstance(parameter.Name, position, direction, grip.Factor) { Kind = grip.Kind, Center = center, Up = grip.Up });
         }
 
         return grips;
