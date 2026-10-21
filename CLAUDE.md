@@ -18,16 +18,16 @@ Usuário: Heyttor (engenheiro civil, fala português). Responda em **português*
 ## Estrutura
 
 ```
-DeviceModeler.sln
-├─ src/Modeler.Core          net8.0, SEM AutoCAD — linguagem, avaliação, CSG, codec, relatórios
-├─ src/Modeler.Civil3D       plugin (net8.0-windows ou net10.0-windows, auto) — comandos DM_* e C3DHYDRO
+HYDRO.sln
+├─ src/Hydro.Core          net8.0, SEM AutoCAD — linguagem, avaliação, CSG, codec, relatórios
+├─ src/Hydro.Civil3D       plugin (net8.0-windows ou net10.0-windows, auto) — comandos HY_* e C3DHYDRO
 │   ├─ Infra/                log comum (HydroLog) e progresso (Progress)
 │   ├─ Ui/Common/            tema, estilos, ícones 32×32, janela de progresso e de log (molde do Viário)
 │   └─ Ui/Panel/             painel HYDRO: janela, monitor e uma classe por categoria
-├─ tests/Modeler.Core.Tests  xUnit — tudo que não depende do CAD
+├─ tests/Hydro.Core.Tests  xUnit — tudo que não depende do CAD
 ├─ catalog/exemplos/         pv_retangular.yaml (caso de teste principal)
 ├─ deploy/                   PackageContents.xml do bundle + aviso de terceiros
-├─ dist/DeviceModeler.bundle bundle PRONTO (DLLs versionadas de propósito), gerado por tools/Build-Dist.ps1
+├─ dist/HYDRO.bundle bundle PRONTO (DLLs versionadas de propósito), gerado por tools/Build-Dist.ps1
 ├─ tools/                    Install-Bundle.ps1 (instala em %APPDATA%), Build-Dist.ps1 (regera dist/)
 └─ refs/acad2026/            DLLs da Autodesk copiadas p/ compilar sem Civil 3D — NÃO versionar (gitignore)
 ```
@@ -35,7 +35,7 @@ DeviceModeler.sln
 ## Compilar e testar
 
 ```bash
-dotnet build DeviceModeler.sln
+dotnet build HYDRO.sln
 dotnet test
 powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de mudar o plugin
 ```
@@ -50,12 +50,12 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
   - O `dist/` é sempre net8, compilado contra `refs/acad2026` (25.1.60), e carrega nos dois.
   - Sem `refs/`, `Build-Dist.ps1` usa a instalação local. Num Civil 3D .NET 8 isso também dá net8.
 - `AcadDir` pode ser forçado: `dotnet build -p:AcadDir=C:\caminho`.
-- Saída local: `NETLOAD\` (ignorado pelo git): **DLL única** `Modeler.Civil3D.dll` + `catalog\`.
-  O alvo `EmbedDependencies` do csproj embute `Modeler.Core.dll` e `YamlDotNet.dll` como recursos
+- Saída local: `NETLOAD\` (ignorado pelo git): **DLL única** `Hydro.Civil3D.dll` + `catalog\`.
+  O alvo `EmbedDependencies` do csproj embute `Hydro.Core.dll` e `YamlDotNet.dll` como recursos
   `Embedded.<nome>.dll`, e o `EmbeddedAssemblies` (com `[ModuleInitializer]`) os carrega no mesmo
   `AssemblyLoadContext` do plugin. O catálogo também vai embutido (`Catalog/...`) e é extraído para
-  `%APPDATA%\DeviceModeler\catalog` quando não há `catalog\` ao lado da DLL. Antes disso, copiar só
-  a DLL principal dava `FileNotFoundException: Modeler.Core`. Restos antigos de `Modeler.Core.dll`
+  `%APPDATA%\HYDRO\catalog` quando não há `catalog\` ao lado da DLL. Antes disso, copiar só
+  a DLL principal dava `FileNotFoundException: Hydro.Core`. Restos antigos de `Hydro.Core.dll`
   na saída são apagados pelo alvo `RemoveStaleDependencies`.
 
 ## Convenções
@@ -63,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
 - **Mensagens, DSL, comentários e docs em português.** A API C# tem nomes em inglês
   (`DeviceDefinition.Evaluate`, `inst.Quantities`). No YAML as chaves são em português (`parametros`,
   `fluxo`, `se/entao/senao`, `para cada`).
-- Erros sempre com local: `arquivo(linha,coluna): campo: motivo` (`ModelerException` e subclasses).
+- Erros sempre com local: `arquivo(linha,coluna): campo: motivo` (`HydroException` e subclasses).
 - Siga o estilo do código vizinho: `sealed`, records para dados, `<summary>` curtos em português e
   chaves em todos os `if`.
 - **Commits pequenos e descritivos, em português**, terminando com
@@ -87,8 +87,8 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
 - **Sistema local:** X e Y relativos ao ponto de inserção; **Z = cota absoluta**.
 - **No DWG:**
   - Hospedeiro: `BlockReference` de um **bloco anônimo exclusivo**, com um `Solid3d` por saída em
-    camadas `DM-<NOME>`.
-  - Dados: Xrecord `DEVICEMODELER` no dicionário de extensão da referência (`DeviceRecord`), com id,
+    camadas `HY-<NOME>`.
+  - Dados: Xrecord `HYDRO` (antes `DEVICEMODELER`, ainda lido) no dicionário de extensão da referência (`DeviceRecord`), com id,
     versão, hash, caminho do YAML, nome e parâmetros em JSON (código 300, pedaços de 250 caracteres).
   - Posição e rotação ficam no transform do bloco.
   - Regeneração: `DeviceEditing.Reconcile`, deslocamento em Z vira soma nas cotas, escala volta a 1,
@@ -96,13 +96,13 @@ powershell -ExecutionPolicy Bypass -File tools/Build-Dist.ps1   # depois de muda
     Se só mudaram parâmetros fora de `GeometryParameters` (análise de impacto), o bloco fica.
 - **Grips:** `GripOverrule` em BlockReference com `SetExtensionDictionaryEntryFilter`, com o desenho
   dos grips do SOLIDOS (seta verde ACI 3, círculo ACI 4, losango ACI 4, contorno ACI 7, cores fixas).
-  Mudança de out/2026 (pedido do usuário: grips iguais aos do SOLIDOS, com prévia): o `DM_GRIP` saiu;
+  Mudança de out/2026 (pedido do usuário: grips iguais aos do SOLIDOS, com prévia): o `HY_GRIP` saiu;
   `MoveGripPointsAt` só calcula o valor e o aramado da prévia (Core, sem ACIS) e o `GripEnd` põe a
   edição na fila. **Continua valendo: nunca refaça geometria dentro do overrule.**
 - **Fila no fim do comando (`DeviceWatcher`, antes `PipeWatcher`):** `ObjectModified`,
   `ObjectErased`, o `DeepClone` e os grips só enfileiram; o processamento é no `CommandEnded`, com
   `LockDocument`, em fases (grips → cópias → tubos apagados → tubos → superfícies → dependentes),
-  ignorando UNDO/REDO. Tubos e superfícies são ignorados no fim dos próprios DM_*.
+  ignorando UNDO/REDO. Tubos e superfícies são ignorados no fim dos próprios HY_*.
 - **Conexões:** `{nome, angulo, cota (geratriz inferior interna), diametro (interno),
   diametro_externo, ref (handle do tubo)}`. O furo do PV usa `diametro_externo + 0.10`, centrado em
   `cota + diametro/2`.
@@ -135,13 +135,26 @@ O que se aprendeu:
 
 ## Estado atual
 
+**Renomeado para HYDRO (out/2026, pedido do usuário: "renomear tudo para hydro"):**
+- Projetos `Hydro.Core`, `Hydro.Civil3D` e `Hydro.Core.Tests`, namespaces `Hydro.*`, `HydroException`,
+  solução `HYDRO.sln`, DLL `Hydro.Civil3D.dll`, bundle `HYDRO.bundle`.
+- Comandos `HY_*` (antes `DM_*`); o painel continua `C3DHYDRO`. Camadas `HY-<NOME>`, `HY-PERFIL`,
+  `HY-ROTULOS`, `HY-TABELAS`.
+- Pastas `%APPDATA%\HYDRO` e `%LOCALAPPDATA%\HYDRO\logs` (as antigas `DeviceModeler` não são lidas).
+- No DWG: Xrecord `HYDRO` e `HYDRO_VERSAO`. Os registros antigos (`DEVICEMODELER`) continuam
+  legíveis e migram na próxima gravação; o `HY_AUDITAR` migra todos. Os overrules filtram só a chave
+  nova, então até a migração os blocos antigos ficam sem grips e sem o tratamento de cópia.
+- `Install-Bundle.ps1` apaga o `DeviceModeler.bundle` antigo, para os dois não carregarem juntos.
+- O repositório no GitHub e a pasta local continuam `DeviceModeler`. Renomear o repositório é com o
+  dono.
+
 **Fase 1, concluída:** o Core completo e o `pv_retangular.yaml`.
 - Degraus a cada 0,30 m quando H > 2,0 m, furo e conector por conexão, junção SWMM.
 - Quantitativos: concreto, fôrma, escavação, lastro e degraus.
 
 **Fase 2, implementada:** compila sem avisos, mas **ainda não foi testada no Civil 3D**.
-- Comandos: DM_INSERIR, DM_EDITAR, DM_CONECTAR, DM_SUPERFICIE, DM_ATUALIZAR, DM_AUTO,
-  DM_QUANTITATIVOS, DM_SWMM, DM_INFO e DM_CATALOGO.
+- Comandos: HY_INSERIR, HY_EDITAR, HY_CONECTAR, HY_SUPERFICIE, HY_ATUALIZAR, HY_AUTO,
+  HY_QUANTITATIVOS, HY_SWMM, HY_INFO e HY_CATALOGO.
 - Janela com PropertyGrid e resumo ao vivo, jig de inserção e bundle de autoload.
 
 **HYDRO F0 (fundação), implementada (out/2026), não testada no CAD:**
@@ -149,7 +162,7 @@ O que se aprendeu:
 - Painel `C3DHYDRO` no molde do Viário (`Ui/Panel`), com as nove categorias da proposta B §6.1.
   Funcionam Dispositivos, Catálogo e Configuração; as outras mostram "em breve".
 - Log comum (`HydroLog`, Ctrl+Shift+L), progresso (`Progress` + `ProgressWindow`), Ribbon HYDRO
-  com um botão por categoria, e `DM_IR` (seleciona por handle).
+  com um botão por categoria, e `HY_IR` (seleciona por handle).
 - Core: `Affine` e `PlanOutline` (planta esquemática da árvore CSG para o monitor).
 
 **HYDRO F1 (linguagem v2), implementada e coberta por testes no Core:**
@@ -170,8 +183,8 @@ O que se aprendeu:
 - `DeviceObjectOverrule` (DeepClone → bloco, id e nome novos no fim do comando; Erase → fila).
 - Superfície seguida por `ComputeFingerPrint()` (ulong) gravado no registro.
 - `DeviceRecord` esquema 2 (metadados JSON código 301: id GUID, superfície, número, rede) e
-  `DEVICEMODELER_VERSAO` no NOD; `DM_AUDITAR` (lista e corrige) e categoria Verificação no painel.
-- Osnap de conector (`ConnectorSnap`, `DM_OSNAP`), dica no cursor (`modelos.dica`) e menu de
+  `HYDRO_VERSAO` no NOD; `HY_AUDITAR` (lista e corrige) e categoria Verificação no painel.
+- Osnap de conector (`ConnectorSnap`, `HY_OSNAP`), dica no cursor (`modelos.dica`) e menu de
   contexto HYDRO (`DeviceInteraction`). `InstanceCache` compartilhado (painel, dica, osnap, grips).
 
 **HYDRO F3 (rede e lançamento), implementada, não testada no CAD:**
@@ -182,7 +195,7 @@ O que se aprendeu:
   (`StructureHandle` no registro), tubo nativo ligado às estruturas.
 - `NetworkSync` + fase "dispositivos alterados" do `DeviceWatcher`: a estrutura acompanha o
   dispositivo; pontas soltas vão ao conector pelo modo (`EndMode` no registro ou o padrão).
-- Comandos `DM_REDE` (jig em cadeia, `ChainJig`), `DM_NUMERAR`, `DM_PONTAS`, `DM_ESTRUTURA`.
+- Comandos `HY_REDE` (jig em cadeia, `ChainJig`), `HY_NUMERAR`, `HY_PONTAS`, `HY_ESTRUTURA`.
 - Painel: categoria Redes (planta com setas do fluxo, abas Dispositivos e Trechos); Dispositivos
   com Nº e Rede.
 
@@ -194,7 +207,7 @@ O que se aprendeu:
   dispositivos, `OutputsUpdater` (última fase da fila: dispositivos, vistas e alinhamentos
   alterados), `Projections` (corte por `Solid3d.GetSection` no plano do alinhamento + mapeamento por
   `FindXYAtStationAndElevation`), `ProjectionGripOverrule` (losango na vista de perfil).
-- Comandos `DM_PROJETAR`, `DM_ROTULO`, `DM_TABELA`, `DM_ESTILO`, `DM_SAIDAS`; categoria Saídas com
+- Comandos `HY_PROJETAR`, `HY_ROTULO`, `HY_TABELA`, `HY_ESTILO`, `HY_SAIDAS`; categoria Saídas com
   editor de estilos.
 
 **Padrão de interface:** o painel do Viário (github.com/heyttor-camelo/Civil3D2026Plugin,

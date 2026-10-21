@@ -1,0 +1,108 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Plugin do Civil 3D 2026 (.NET 8). Converte a árvore CSG do Hydro.Core em Solid3d,
+    grava os parâmetros no DWG (Xrecord) e oferece os comandos HY_*.
+
+    Referências: instalação do Civil 3D 2026; se ela não existir (ex.: máquina de build),
+    usa a cópia local em refs\acad2026 (não versionada). Copy Local = false (Private=False).
+    Saída: NETLOAD\Hydro.Civil3D.dll — DLL única: Hydro.Core.dll e YamlDotNet.dll vão
+    embutidos como recurso (EmbeddedAssemblies.cs os carrega) e o catálogo também (extraído
+    para %APPDATA% quando não há pasta catalog\ ao lado da DLL).
+  -->
+  <PropertyGroup>
+    <AcadDir Condition="'$(AcadDir)' == '' And Exists('$(ProgramFiles)\Autodesk\AutoCAD 2026\acdbmgd.dll')">$(ProgramFiles)\Autodesk\AutoCAD 2026</AcadDir>
+    <AcadDir Condition="'$(AcadDir)' == ''">$(MSBuildThisFileDirectory)..\..\refs\acad2026</AcadDir>
+
+    <!-- Builds do Civil 3D 2026 a partir de 25.1.179 rodam em .NET 10 (as DLLs referenciam
+         System.Runtime 10). O alvo segue o runtime da instalação usada como referência;
+         uma DLL net8 compilada contra uma instalação .NET 8 carrega nas duas. -->
+    <AcadRuntimeConfig>$(AcadDir)\acdbmgd.runtimeconfig.json</AcadRuntimeConfig>
+    <AcadTfm Condition="Exists('$(AcadRuntimeConfig)') And $([System.IO.File]::ReadAllText('$(AcadRuntimeConfig)').Contains('net10.0'))">net10.0-windows</AcadTfm>
+    <AcadTfm Condition="'$(AcadTfm)' == ''">net8.0-windows</AcadTfm>
+    <TargetFramework>$(AcadTfm)</TargetFramework>
+
+    <AssemblyName>Hydro.Civil3D</AssemblyName>
+    <RootNamespace>Hydro.Civil3D</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- as DLLs do AutoCAD referenciam WPF (WindowsBase); sem isso há conflito de versões -->
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <Deterministic>true</Deterministic>
+
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\NETLOAD\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <!-- põe YamlDotNet.dll em ReferenceCopyLocalPaths para o alvo EmbedDependencies embuti-lo -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Hydro.Core\Hydro.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="accoremgd">
+      <HintPath>$(AcadDir)\accoremgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="acdbmgd">
+      <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="acmgd">
+      <HintPath>$(AcadDir)\acmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AdWindows">
+      <HintPath>$(AcadDir)\AdWindows.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AecBaseMgd">
+      <HintPath>$(AcadDir)\ACA\AecBaseMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AeccDbMgd">
+      <HintPath>$(AcadDir)\C3D\AeccDbMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- catálogo vai junto da DLL (NETLOAD\catalog\...) e também embutido nela -->
+  <ItemGroup>
+    <None Include="..\..\catalog\**\*.yaml" Link="catalog\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="..\..\catalog\**\*.yaml" LogicalName="Catalog/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- DLL única: as dependências que o Civil 3D não fornece viram recursos "Embedded.<nome>.dll"
+       e não são copiadas para a saída. -->
+  <Target Name="EmbedDependencies" AfterTargets="ResolveReferences" BeforeTargets="PrepareResources">
+    <ItemGroup>
+      <_HyEmbedded Include="@(ReferenceCopyLocalPaths)" Condition="'%(Extension)' == '.dll' And ('%(Filename)' == 'Hydro.Core' Or '%(Filename)' == 'YamlDotNet')" />
+      <EmbeddedResource Include="@(_HyEmbedded)" LogicalName="Embedded.%(Filename)%(Extension)" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'Hydro.Core' Or '%(Filename)' == 'YamlDotNet'" />
+    </ItemGroup>
+    <Error Condition="'@(_HyEmbedded->Count())' != '2'" Text="EmbedDependencies: esperava Hydro.Core.dll e YamlDotNet.dll em ReferenceCopyLocalPaths (achei: @(_HyEmbedded))." />
+  </Target>
+
+  <Target Name="CheckAcadDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(AcadDir)\acdbmgd.dll')"
+           Text="Não achei acdbmgd.dll em '$(AcadDir)'. Instale o Civil 3D 2026 ou copie as DLLs de referência para refs\acad2026 (ver README)." />
+    <Error Condition="!Exists('$(AcadDir)\C3D\AeccDbMgd.dll')"
+           Text="Não achei C3D\AeccDbMgd.dll em '$(AcadDir)' (é preciso o Civil 3D, não só o AutoCAD)." />
+  </Target>
+
+  <!-- restos de compilações antigas (antes da DLL única) não podem ir para o bundle -->
+  <Target Name="RemoveStaleDependencies" AfterTargets="Build">
+    <Delete Files="$(OutDir)Hydro.Core.dll;$(OutDir)Hydro.Core.pdb;$(OutDir)YamlDotNet.dll;$(OutDir)YamlDotNet.xml" />
+  </Target>
+
+  <Target Name="ShowNetloadPath" AfterTargets="Build">
+    <Message Importance="high" Text="DLL pronta para NETLOAD (referências de $(AcadDir)): $(TargetPath)" />
+  </Target>
+
+</Project>

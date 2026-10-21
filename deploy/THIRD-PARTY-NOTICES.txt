@@ -1,4 +1,4 @@
-DeviceModeler inclui o seguinte componente de terceiros:
+HYDRO inclui o seguinte componente de terceiros:
 
 YamlDotNet (https://github.com/aaubry/YamlDotNet)
 Licença MIT — Copyright (c) Antoine Aubry and contributors

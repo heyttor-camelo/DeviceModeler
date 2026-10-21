@@ -1,9 +1,9 @@
-<#
+﻿<#
 .SYNOPSIS
-  Compila o plugin e instala o bundle de autoload do DeviceModeler para o usuário atual.
+  Compila o plugin e instala o bundle de autoload do HYDRO para o usuário atual.
 .DESCRIPTION
-  Copia deploy\DeviceModeler.bundle\PackageContents.xml e o conteúdo de NETLOAD\ (Modeler.Civil3D.dll + catalog\)
-  para %APPDATA%\Autodesk\ApplicationPlugins\DeviceModeler.bundle\. Feche o Civil 3D antes
+  Copia deploy\HYDRO.bundle\PackageContents.xml e o conteúdo de NETLOAD\ (Hydro.Civil3D.dll + catalog\)
+  para %APPDATA%\Autodesk\ApplicationPlugins\HYDRO.bundle\. Feche o Civil 3D antes
   (a DLL carregada fica bloqueada). Use -Remove para desinstalar.
 #>
 param(
@@ -13,16 +13,23 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$target = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\DeviceModeler.bundle'
+$target = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\HYDRO.bundle'
+
+# Nome antigo do plugin (DeviceModeler, até out/2026): sai sempre, senão os dois carregariam juntos.
+$legacy = Join-Path $env:APPDATA 'Autodesk\ApplicationPlugins\DeviceModeler.bundle'
+if (Test-Path $legacy) {
+    Remove-Item -Recurse -Force $legacy
+    Write-Host "Bundle antigo removido: $legacy"
+}
 
 if ($Remove) {
     if (Test-Path $target) { Remove-Item -Recurse -Force $target }
-    Write-Host "DeviceModeler removido de $target"
+    Write-Host "HYDRO removido de $target"
     return
 }
 
 if (-not $NoBuild) {
-    dotnet build (Join-Path $root 'src\Modeler.Civil3D\Modeler.Civil3D.csproj') -c Release
+    dotnet build (Join-Path $root 'src\Hydro.Civil3D\Hydro.Civil3D.csproj') -c Release
     if ($LASTEXITCODE -ne 0) { throw 'falha na compilação' }
 }
 
@@ -30,6 +37,6 @@ $contents = Join-Path $target 'Contents'
 # O conteúdo antigo sai antes: DLLs avulsas de versões anteriores à DLL única quebrariam o plugin.
 if (Test-Path $contents) { Remove-Item -Recurse -Force $contents }
 New-Item -ItemType Directory -Force $contents | Out-Null
-Copy-Item (Join-Path $root 'deploy\DeviceModeler.bundle\PackageContents.xml') $target -Force
+Copy-Item (Join-Path $root 'deploy\HYDRO.bundle\PackageContents.xml') $target -Force
 Copy-Item (Join-Path $root 'NETLOAD\*') $contents -Recurse -Force
-Write-Host "DeviceModeler instalado em $target (carrega ao abrir o Civil 3D 2026)."
+Write-Host "HYDRO instalado em $target (carrega ao abrir o Civil 3D 2026)."

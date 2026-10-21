@@ -24,7 +24,7 @@ git clone https://github.com/heyttor-camelo/DeviceModeler.git
 
 ```bash
 cd DeviceModeler
-dotnet build DeviceModeler.sln
+dotnet build HYDRO.sln
 dotnet test
 ```
 
@@ -56,7 +56,7 @@ Uma boa primeira mensagem:
 
 O REA ("Reverse Engineer Anything", https://github.com/morluto/rea) é um servidor MCP e uma CLI
 distribuídos pelo npm (`rea-agents`). Foi com ele que estudamos o SOLIDOS. O método, o que se
-aprendeu e como isso virou o desenho do DeviceModeler estão em
+aprendeu e como isso virou o desenho do HYDRO estão em
 [ESTUDO-SOLIDOS.md](ESTUDO-SOLIDOS.md).
 
 Requisito: Node.js (passo 1). Não há instalação separada: o `npx` baixa a versão fixada
@@ -128,18 +128,18 @@ sempre fora do repositório; o código descompilado é só para consulta.
 
 ## 5. Usar o plugin no Civil 3D
 
-**Sem compilar:** copie a pasta inteira `dist\DeviceModeler.bundle` para
+**Sem compilar:** copie a pasta inteira `dist\HYDRO.bundle` para
 `%APPDATA%\Autodesk\ApplicationPlugins\` e abra o Civil 3D 2026.
 
-**Compilando:** rode `dotnet build`, depois `NETLOAD` em `NETLOAD\Modeler.Civil3D.dll`. Para
+**Compilando:** rode `dotnet build`, depois `NETLOAD` em `NETLOAD\Hydro.Civil3D.dll`. Para
 instalar o bundle com o Civil 3D fechado:
 `powershell -ExecutionPolicy Bypass -File tools/Install-Bundle.ps1`.
 
-> **Importante:** `Modeler.Civil3D.dll`, `Modeler.Core.dll` e `YamlDotNet.dll` (mais a pasta
+> **Importante:** `Hydro.Civil3D.dll`, `Hydro.Core.dll` e `YamlDotNet.dll` (mais a pasta
 > `catalog\`) precisam estar **na mesma pasta**. Copiar só a DLL principal causa
-> `FileNotFoundException: Could not load file or assembly 'Modeler.Core'`.
+> `FileNotFoundException: Could not load file or assembly 'Hydro.Core'`.
 
-Depois de carregar, rode `DM_CATALOGO`; deve aparecer `pv_retangular`. Em seguida, siga o
+Depois de carregar, rode `HY_CATALOGO`; deve aparecer `pv_retangular`. Em seguida, siga o
 "Roteiro de teste manual" do README.
 
 ## 6. O que foi feito até agora
@@ -151,6 +151,6 @@ Depois de carregar, rode `DM_CATALOGO`; deve aparecer `pv_retangular`. Em seguid
 | Depois | categoria linear, catálogo DNIT (IPR 736) com presets, prévia nos grips, nós SWMM storage/outfall | planejado |
 
 A arquitetura da Fase 2 foi inspirada no SOLIDOS, estudado com o REA e o ILSpy. O método, a tabela
-"SOLIDOS × DeviceModeler" e as ideias que ainda faltam estão em [ESTUDO-SOLIDOS.md](ESTUDO-SOLIDOS.md).
+"SOLIDOS × HYDRO" e as ideias que ainda faltam estão em [ESTUDO-SOLIDOS.md](ESTUDO-SOLIDOS.md).
 
 O histórico completo está em `git log`. O detalhe técnico está no `CLAUDE.md` e no `README.md`.

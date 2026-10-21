@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Autoload do HYDRO. tools/Install-Bundle.ps1 copia este arquivo e o conteúdo de NETLOAD
+     para %APPDATA%\Autodesk\ApplicationPlugins\HYDRO.bundle\ (Contents\). -->
+<ApplicationPackage SchemaVersion="1.0" Name="HYDRO" AppVersion="0.2.0"
+                    Description="Modelador paramétrico de dispositivos de drenagem (definições YAML)"
+                    ProductCode="{606EE87C-DCCD-4244-A0EB-FC8CA847588B}" Author="Heyttor Gonzaga">
+  <CompanyDetails Name="HYDRO" />
+  <Components Description="HYDRO para Civil 3D 2026">
+    <RuntimeRequirements OS="Win64" Platform="Civil3D" SeriesMin="R25.1" SeriesMax="R25.1" />
+    <ComponentEntry AppName="HYDRO" ModuleName="./Contents/Hydro.Civil3D.dll" AppType=".NET"
+                    AppDescription="HYDRO (comandos HY_*)" LoadOnAutoCADStartup="True" />
+  </Components>
+</ApplicationPackage>

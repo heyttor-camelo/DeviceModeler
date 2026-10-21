@@ -1,4 +1,4 @@
-# DeviceModeler
+# HYDRO
 
 Modelador paramétrico de dispositivos de drenagem (PVs, caixas, bocas de bueiro, sarjetas,
 valetas) para o Civil 3D 2026. Cada dispositivo é descrito em **texto (YAML)**: parâmetros,
@@ -6,10 +6,10 @@ variáveis, um fluxo que monta uma **árvore CSG** e as saídas — sólidos, co
 nó hidráulico (SWMM) e quantitativos.
 
 ```
-DeviceModeler.sln
-├─ src/Modeler.Core           net8.0, sem nenhuma referência ao AutoCAD
-├─ src/Modeler.Civil3D        net8.0-windows, plugin do Civil 3D 2026 (comandos DM_*)
-├─ tests/Modeler.Core.Tests   xUnit
+HYDRO.sln
+├─ src/Hydro.Core           net8.0, sem nenhuma referência ao AutoCAD
+├─ src/Hydro.Civil3D        net8.0-windows, plugin do Civil 3D 2026 (comandos HY_*)
+├─ tests/Hydro.Core.Tests   xUnit
 ├─ catalog/exemplos/          definições .yaml (pv_retangular.yaml)
 ├─ deploy/                    bundle de autoload (PackageContents.xml)
 └─ tools/Install-Bundle.ps1   compila e instala o bundle
@@ -31,8 +31,8 @@ dotnet test
 ## Uso da API
 
 ```csharp
-using Modeler.Core.Definition;
-using Modeler.Core.Results;
+using Hydro.Core.Definition;
+using Hydro.Core.Results;
 
 var def  = DeviceDefinition.Load("catalog/exemplos/pv_retangular.yaml");
 var inst = def.Evaluate(new Dictionary<string, object>
@@ -427,7 +427,7 @@ Decisões de projeto:
 - **Árvore CSG só com dados:** nada de malha nem de AutoCAD no Core. A geometria real fica com quem
   implementa `ICsgVisitor<T>`.
 
-## Fase 2: plugin do Civil 3D (`Modeler.Civil3D`)
+## Fase 2: plugin do Civil 3D (`Hydro.Civil3D`)
 
 `net8.0-windows`, x64. Referencia `acdbmgd`, `acmgd`, `accoremgd`, `AeccDbMgd` e `AecBaseMgd` da
 instalação do Civil 3D 2026 com `Private=False` (Copy Local = false). Se o Civil 3D não estiver
@@ -437,14 +437,14 @@ instalado, usa a cópia em `refs\acad2026\` (ignorada pelo git). Também dá par
 ### Compilar e carregar
 
 ```bash
-dotnet build DeviceModeler.sln
+dotnet build HYDRO.sln
 ```
 
-A saída fica em `NETLOAD\`: **uma DLL só**, `Modeler.Civil3D.dll`, mais a pasta `catalog\`.
-O `Modeler.Core.dll` e o `YamlDotNet.dll` vão embutidos nela como recurso (`EmbeddedAssemblies`
+A saída fica em `NETLOAD\`: **uma DLL só**, `Hydro.Civil3D.dll`, mais a pasta `catalog\`.
+O `Hydro.Core.dll` e o `YamlDotNet.dll` vão embutidos nela como recurso (`EmbeddedAssemblies`
 os carrega no `ModuleInitializer`), e o catálogo também: se só a DLL for copiada, as definições
-são extraídas para `%APPDATA%\DeviceModeler\catalog`. No Civil 3D, rode `NETLOAD` em
-`NETLOAD\Modeler.Civil3D.dll`. Para carregar automaticamente ao abrir o Civil 3D, instale o bundle
+são extraídas para `%APPDATA%\HYDRO\catalog`. No Civil 3D, rode `NETLOAD` em
+`NETLOAD\Hydro.Civil3D.dll`. Para carregar automaticamente ao abrir o Civil 3D, instale o bundle
 com o Civil 3D fechado:
 
 ```bash
@@ -453,7 +453,7 @@ powershell -ExecutionPolicy Bypass -File tools/Install-Bundle.ps1
 
 `-Remove` desinstala o bundle.
 
-**Sem compilar (outra máquina):** o repositório traz o bundle pronto em `dist/DeviceModeler.bundle`.
+**Sem compilar (outra máquina):** o repositório traz o bundle pronto em `dist/HYDRO.bundle`.
 Copie a pasta inteira para `%APPDATA%\Autodesk\ApplicationPlugins\` e abra o Civil 3D 2026. A DLL é
 net8.0, compilada contra o Civil 3D 2026 25.1.60, e carrega também nos builds mais novos, que rodam
 em .NET 10. Para regenerar o bundle depois de mudar o código, rode
@@ -462,30 +462,30 @@ o repositório.
 
 **Alvo .NET 8 ou 10:** a partir do build 25.1.179, o Civil 3D 2026 roda em .NET 10. O csproj lê
 `acdbmgd.runtimeconfig.json` da instalação usada como referência e compila para `net10.0-windows`
-quando é o caso; caso contrário, compila para `net8.0-windows`. O manifesto `deploy/DeviceModeler.bundle/PackageContents.xml` vale
+quando é o caso; caso contrário, compila para `net8.0-windows`. O manifesto `deploy/HYDRO.bundle/PackageContents.xml` vale
 para a série R25.1 (Civil 3D 2026).
 
 ### Comandos
 
 | Comando | O que faz |
 |---------|-----------|
-| `DM_INSERIR` | Abre uma janela com a lista do catálogo, o PropertyGrid dos parâmetros e um resumo que se recalcula a cada alteração (variáveis, quantitativos, avisos e erros; o OK só é habilitado quando tudo é válido). Depois pede o ponto e a rotação com jig e, se a definição tiver `alvo: superficie`, a superfície da cota da tampa |
-| `DM_EDITAR` | Mesma janela, com os valores atuais; regenera ao confirmar |
+| `HY_INSERIR` | Abre uma janela com a lista do catálogo, o PropertyGrid dos parâmetros e um resumo que se recalcula a cada alteração (variáveis, quantitativos, avisos e erros; o OK só é habilitado quando tudo é válido). Depois pede o ponto e a rotação com jig e, se a definição tiver `alvo: superficie`, a superfície da cota da tampa |
+| `HY_EDITAR` | Mesma janela, com os valores atuais; regenera ao confirmar |
 | *grips* | Cada parâmetro com `grip:` ganha um grip (seta, círculo de rotação ou losango de perfil). Arraste: a prévia em aramado e o valor aparecem durante o arrasto, e o dispositivo se refaz ao soltar |
-| `DM_CONECTAR` | Liga tubos de Pipe Network ao dispositivo (substitui ou adiciona). Preenche `Conexoes` (ângulo, cota de fundo, diâmetros interno e externo, handle) e os parâmetros com `alvo: tubo` (menor cota de fundo). O PV abre os furos e cria os conectores |
-| `DM_SUPERFICIE` | Parâmetros com `alvo: superficie` passam a valer a elevação da superfície no ponto de inserção. Com "Acompanhar" (padrão), a elevação é refeita quando a superfície mudar |
-| `DM_AUDITAR` | Lista os problemas dos dispositivos (esquema antigo, YAML ausente ou alterado, bloco compartilhado, nome ou id repetido, conexão para tubo apagado, superfície apagada) e oferece as correções automáticas. A categoria Verificação do painel mostra a mesma lista |
-| `DM_OSNAP` | Liga ou desliga o osnap de conector |
-| `DM_REDE` | Lançamento em cadeia: escolhe o dispositivo e os parâmetros uma vez (mesma janela do `DM_INSERIR`), o nome da rede de tubos, o diâmetro e a declividade, e a superfície (opcional). Cada clique insere um dispositivo (girado na direção do trecho) com uma estrutura nula da Pipe Network e o tubo nativo desde o anterior, já com furo e conector dos dois lados; a elevação de fundo desce pela declividade e a da tampa vem da superfície. O jig mostra o aramado do dispositivo e o trecho. Desfazer volta um trecho; no fim, oferece a numeração |
-| `DM_NUMERAR` | Numera pelo fluxo (Global: das cabeceiras mais distantes para a descarga, de modo que o fluxo vá sempre do menor para o maior número; Invertido: a descarga é 1) e renomeia pelo `modelos.nome` (e a estrutura nula junto) |
-| `DM_PONTAS` | Modo de recálculo das pontas soltas dos tubos ligados (sem estrutura): conector Fixo, Ajustar (o mais próximo), Melhor3d ou Melhor2d (o que deixa o tubo mais curto) × elevação Corrigir (a do conector) ou Manter. Grava no dispositivo e aplica já; depois, mover o dispositivo leva as pontas |
-| `DM_ESTRUTURA` | Cria a estrutura nula da Pipe Network de cada dispositivo e liga a ela as pontas soltas dos tubos conectados: mover o dispositivo passa a mover a estrutura e os tubos |
+| `HY_CONECTAR` | Liga tubos de Pipe Network ao dispositivo (substitui ou adiciona). Preenche `Conexoes` (ângulo, cota de fundo, diâmetros interno e externo, handle) e os parâmetros com `alvo: tubo` (menor cota de fundo). O PV abre os furos e cria os conectores |
+| `HY_SUPERFICIE` | Parâmetros com `alvo: superficie` passam a valer a elevação da superfície no ponto de inserção. Com "Acompanhar" (padrão), a elevação é refeita quando a superfície mudar |
+| `HY_AUDITAR` | Lista os problemas dos dispositivos (esquema antigo, YAML ausente ou alterado, bloco compartilhado, nome ou id repetido, conexão para tubo apagado, superfície apagada) e oferece as correções automáticas. A categoria Verificação do painel mostra a mesma lista |
+| `HY_OSNAP` | Liga ou desliga o osnap de conector |
+| `HY_REDE` | Lançamento em cadeia: escolhe o dispositivo e os parâmetros uma vez (mesma janela do `HY_INSERIR`), o nome da rede de tubos, o diâmetro e a declividade, e a superfície (opcional). Cada clique insere um dispositivo (girado na direção do trecho) com uma estrutura nula da Pipe Network e o tubo nativo desde o anterior, já com furo e conector dos dois lados; a elevação de fundo desce pela declividade e a da tampa vem da superfície. O jig mostra o aramado do dispositivo e o trecho. Desfazer volta um trecho; no fim, oferece a numeração |
+| `HY_NUMERAR` | Numera pelo fluxo (Global: das cabeceiras mais distantes para a descarga, de modo que o fluxo vá sempre do menor para o maior número; Invertido: a descarga é 1) e renomeia pelo `modelos.nome` (e a estrutura nula junto) |
+| `HY_PONTAS` | Modo de recálculo das pontas soltas dos tubos ligados (sem estrutura): conector Fixo, Ajustar (o mais próximo), Melhor3d ou Melhor2d (o que deixa o tubo mais curto) × elevação Corrigir (a do conector) ou Manter. Grava no dispositivo e aplica já; depois, mover o dispositivo leva as pontas |
+| `HY_ESTRUTURA` | Cria a estrutura nula da Pipe Network de cada dispositivo e liga a ela as pontas soltas dos tubos conectados: mover o dispositivo passa a mover a estrutura e os tubos |
 
-| `DM_PROJETAR` | Projeta dispositivos numa vista de perfil: o sólido é **cortado** pelo plano vertical do alinhamento na estaca do dispositivo (tangente local) e o resultado vai para a vista com `FindXYAtStationAndElevation` (exagero e datum). Pede o estilo de projeção, o lado (Ambos/Esquerdo/Direito) e a distância máxima ao alinhamento |
-| `DM_ROTULO` | Rótulo (MLeader) com um modelo de macros (padrão: a dica da definição); acompanha o dispositivo |
-| `DM_TABELA` | Tabela nativa (Padrão: Nº, nome, dispositivo, código, X, Y, elevações e altura; Quantitativos: os quantitativos das definições); com Enter na seleção, pega todos os dispositivos, inclusive os que vierem depois |
-| `DM_ESTILO` | Estilo de dispositivo: Aplicar aos dispositivos, Criar a partir de um dispositivo (uma linha por sólido) ou Atualizar (refazer depois de editar o estilo no painel) |
-| `DM_SAIDAS` | Refaz todos os rótulos, tabelas e projeções |
+| `HY_PROJETAR` | Projeta dispositivos numa vista de perfil: o sólido é **cortado** pelo plano vertical do alinhamento na estaca do dispositivo (tangente local) e o resultado vai para a vista com `FindXYAtStationAndElevation` (exagero e datum). Pede o estilo de projeção, o lado (Ambos/Esquerdo/Direito) e a distância máxima ao alinhamento |
+| `HY_ROTULO` | Rótulo (MLeader) com um modelo de macros (padrão: a dica da definição); acompanha o dispositivo |
+| `HY_TABELA` | Tabela nativa (Padrão: Nº, nome, dispositivo, código, X, Y, elevações e altura; Quantitativos: os quantitativos das definições); com Enter na seleção, pega todos os dispositivos, inclusive os que vierem depois |
+| `HY_ESTILO` | Estilo de dispositivo: Aplicar aos dispositivos, Criar a partir de um dispositivo (uma linha por sólido) ou Atualizar (refazer depois de editar o estilo no painel) |
+| `HY_SAIDAS` | Refaz todos os rótulos, tabelas e projeções |
 
 **Estilos e saídas.** O **estilo de dispositivo** é uma tabela de componentes casada pelo nome dos
 sólidos (`expor_solido("concreto", ...)` → componente "concreto"), com camada, visibilidade (o
@@ -508,17 +508,17 @@ Pipe Network do Civil 3D; cada dispositivo pode ter uma estrutura nula no mesmo 
 com ele (posição, rotação e elevações de tampa e fundo). Conectores têm filtro (lista de tipos:
 `tubo`, `valeta`...) e direção: uma ponta só vai para um conector que aceita o tipo e de cujo lado o
 tubo sai.
-| `DM_ATUALIZAR` | Relê os tubos (pelo handle) e o catálogo e regenera; avisa quando a definição mudou (hash) |
-| `DM_AUTO` | Liga ou desliga a atualização automática: se um tubo ligado mudar, o dispositivo se refaz ao fim do comando |
-| `DM_QUANTITATIVOS` | Totais por quantitativo na linha de comando, mais CSV detalhado (`;`) |
-| `DM_SWMM` | Grava `[JUNCTIONS]` e `[COORDINATES]` de todos os dispositivos num `.inp` |
-| `DM_INFO` | Mostra parâmetros, variáveis, quantitativos, conectores (em coordenadas do desenho) e o nó SWMM |
-| `DM_CATALOGO` | Mostra ou troca a pasta do catálogo (gravada em `%APPDATA%\DeviceModeler\settings.json`) e lista as definições e os erros |
+| `HY_ATUALIZAR` | Relê os tubos (pelo handle) e o catálogo e regenera; avisa quando a definição mudou (hash) |
+| `HY_AUTO` | Liga ou desliga a atualização automática: se um tubo ligado mudar, o dispositivo se refaz ao fim do comando |
+| `HY_QUANTITATIVOS` | Totais por quantitativo na linha de comando, mais CSV detalhado (`;`) |
+| `HY_SWMM` | Grava `[JUNCTIONS]` e `[COORDINATES]` de todos os dispositivos num `.inp` |
+| `HY_INFO` | Mostra parâmetros, variáveis, quantitativos, conectores (em coordenadas do desenho) e o nó SWMM |
+| `HY_CATALOGO` | Mostra ou troca a pasta do catálogo (gravada em `%APPDATA%\HYDRO\settings.json`) e lista as definições e os erros |
 | `C3DHYDRO` | Abre o painel HYDRO. `C3DHYDRO Dispositivos` (ou `Redes`, `Catalogo`, `Configuracao`...) abre direto na categoria; Enter abre na última usada |
-| `DM_IR` | Seleciona e enquadra um dispositivo pelo handle; o painel usa antes de `DM_EDITAR`, `DM_INFO` etc. |
+| `HY_IR` | Seleciona e enquadra um dispositivo pelo handle; o painel usa antes de `HY_EDITAR`, `HY_INFO` etc. |
 
-Os comandos que terminam com um dispositivo ou com o catálogo (`DM_INSERIR`, `DM_EDITAR`,
-`DM_INFO`, `DM_CATALOGO`) levam o painel, se estiver aberto, até esse item.
+Os comandos que terminam com um dispositivo ou com o catálogo (`HY_INSERIR`, `HY_EDITAR`,
+`HY_INFO`, `HY_CATALOGO`) levam o painel, se estiver aberto, até esse item.
 
 ### Painel HYDRO (`C3DHYDRO`)
 
@@ -540,7 +540,7 @@ Uma janela WPF não modal e de instância única, no molde do painel do Viário 
 6. **Barra de status**, Preferências (tema claro ou escuro) e Log.
 
 O painel só manda comandos (`SendStringToExecute`); quem pede clique no desenho continua na linha de
-comando. **Esc nunca fecha a janela.** O log comum fica em `%LOCALAPPDATA%\DeviceModeler\logs`
+comando. **Esc nunca fecha a janela.** O log comum fica em `%LOCALAPPDATA%\HYDRO\logs`
 (Ctrl+Shift+L em qualquer janela do HYDRO) e as operações longas usam a janela de progresso comum.
 A Ribbon ganha a aba **HYDRO**, com um botão grande por categoria (`C3DHYDRO <categoria>`) e os
 atalhos Inserir, Editar e Conectar.
@@ -550,14 +550,16 @@ atalhos Inserir, Editar e Conectar.
 O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (implementação própria):
 
 - **Hospedeiro:** um `BlockReference` de um **bloco anônimo exclusivo**. Cada sólido de saída é um
-  `Solid3d` dentro do bloco, na camada `DM-<NOME>` (ex.: `DM-CONCRETO`), com material quando
+  `Solid3d` dentro do bloco, na camada `HY-<NOME>` (ex.: `HY-CONCRETO`), com material quando
   existir um com esse nome no desenho. Sem o plugin, o desenho continua válido: é um bloco comum.
-- **Dados:** Xrecord `DEVICEMODELER` no dicionário de extensão da referência, com marcador, versão
+- **Dados:** Xrecord `HYDRO` no dicionário de extensão da referência, com marcador, versão
   do esquema, id, versão e hash da definição, caminho do YAML, nome da instância e os parâmetros em
   JSON (`ParameterCodec`), em pedaços com código 300. O **esquema 2** acrescenta um JSON de
   metadados (código 301): id da instância (GUID), superfície seguida e a impressão digital dela,
-  número e rede. O esquema 1 continua legível e migra na próxima gravação (ou no `DM_AUDITAR`). O
-  dicionário de objetos nomeados guarda `DEVICEMODELER_VERSAO` (versão do HYDRO e do esquema).
+  número e rede. O esquema 1 continua legível e migra na próxima gravação (ou no `HY_AUDITAR`). O
+  dicionário de objetos nomeados guarda `HYDRO_VERSAO` (versão do HYDRO e do esquema). Desenhos do
+  tempo em que o plugin se chamava DeviceModeler (`DEVICEMODELER`, `DEVICEMODELER_VERSAO`) continuam
+  legíveis; rode `HY_AUDITAR` neles para migrar (até lá, grips e cópias não reconhecem esses blocos).
 - **Posição:** o bloco tem origem 0, e as coordenadas do bloco são o sistema local do dispositivo
   (Z = cota). Mover e girar a referência é suficiente.
 - **Regeneração** (`DeviceService.Regenerate`):
@@ -580,9 +582,9 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
   → tubos alterados → superfícies alteradas → dependentes de dispositivos apagados. Ignora UNDO/REDO.
 - **Cópias e exclusões** (`DeviceObjectOverrule`): o `DeepClone` enfileira a cópia, que no fim do
   comando ganha bloco próprio, id e nome novos (pelo `modelos.nome`). O `Erase` avisa a fila.
-- **Superfície seguida:** `DM_SUPERFICIE` grava a superfície e o `ComputeFingerPrint()` dela; se a
+- **Superfície seguida:** `HY_SUPERFICIE` grava a superfície e o `ComputeFingerPrint()` dela; se a
   superfície mudar (`ObjectModified`) e a impressão digital for outra, a elevação é refeita.
-- **Osnap de conector** (`DM_OSNAP`): `CustomObjectSnapMode` que prende o cursor nos conectores
+- **Osnap de conector** (`HY_OSNAP`): `CustomObjectSnapMode` que prende o cursor nos conectores
   (glifo: quadrado magenta com círculo).
 - **Dica e menu:** ao parar o cursor sobre um dispositivo aparece o `modelos.dica` (ou nome e
   código) e os avisos; o botão direito traz Editar, Conectar, Atualizar, Informações e Mostrar no
@@ -597,66 +599,66 @@ O desenho segue padrões comuns a plugins de dispositivos para Civil 3D (impleme
 
 **Roteiro de teste manual no Civil 3D 2026:**
 
-1. `NETLOAD` e `DM_CATALOGO`: deve listar `pv_retangular`.
-2. `DM_INSERIR` → PV retangular → mude `CotaTampa` para 103 e veja o resumo recalcular. Ponha
+1. `NETLOAD` e `HY_CATALOGO`: deve listar `pv_retangular`.
+2. `HY_INSERIR` → PV retangular → mude `CotaTampa` para 103 e veja o resumo recalcular. Ponha
    `L = 5`: o PropertyGrid recusa. Clique em OK, escolha o ponto e a rotação, pule a superfície.
-3. Confira as camadas `DM-CONCRETO`, `DM-DEGRAUS` (H > 2 m) e `DM-TAMPA`.
+3. Confira as camadas `HY-CONCRETO`, `HY-DEGRAUS` (H > 2 m) e `HY-TAMPA`.
 4. Selecione o PV: os grips de `L`, `B` e `CotaTampa` aparecem como setas verdes com contorno. Arraste
    o de `L`: o aramado amarelo e o valor acompanham o cursor; ao soltar, o PV se refaz. Esc no meio
    do arrasto não muda nada.
-5. Desenhe uma rede de tubos chegando ao PV e rode `DM_CONECTAR`: aparecem os furos e
+5. Desenhe uma rede de tubos chegando ao PV e rode `HY_CONECTAR`: aparecem os furos e
    `CotaFundo` passa a valer a menor cota de fundo.
-6. Mova a ponta de um tubo: com `DM_AUTO` ligado, o furo acompanha.
-7. `COPY` o PV e edite a cópia com `DM_EDITAR`: o original não muda.
-8. `DM_QUANTITATIVOS` (salve o CSV), `DM_SWMM` (abra o `.inp` no SWMM 5) e `DM_INFO`.
+6. Mova a ponta de um tubo: com `HY_AUTO` ligado, o furo acompanha.
+7. `COPY` o PV e edite a cópia com `HY_EDITAR`: o original não muda.
+8. `HY_QUANTITATIVOS` (salve o CSV), `HY_SWMM` (abra o `.inp` no SWMM 5) e `HY_INFO`.
 9. `UNDO` depois de cada passo: tudo volta.
-10. **DLL única:** num Civil 3D limpo, `NETLOAD` só em `Modeler.Civil3D.dll` (sem as outras DLLs ao
-    lado) e `DM_CATALOGO`: deve listar o catálogo, extraído para `%APPDATA%\DeviceModeler\catalog`.
+10. **DLL única:** num Civil 3D limpo, `NETLOAD` só em `Hydro.Civil3D.dll` (sem as outras DLLs ao
+    lado) e `HY_CATALOGO`: deve listar o catálogo, extraído para `%APPDATA%\HYDRO\catalog`.
 11. **Painel:** `C3DHYDRO`. Confira as nove categorias (as sem conteúdo dizem "em breve"), os
     tooltips da barra de comandos, a planta dos dispositivos no monitor (zoom, pan, duplo clique),
     a lista (marcação com espaço, botão direito, duplo clique leva ao dispositivo) e as abas. Troque
     o tema em Preferências e confira que **Esc não fecha** o painel. Ctrl+Shift+L abre o log.
 12. **Ribbon:** a aba HYDRO tem um botão por categoria; cada um abre o painel na categoria.
 13. **Cópias:** `COPY` de um PV: no fim do comando a cópia ganha nome novo (PV-2...) e bloco
-    próprio (`DM_AUDITAR` não acusa bloco compartilhado). Apague um tubo ligado: a conexão sai e o
+    próprio (`HY_AUDITAR` não acusa bloco compartilhado). Apague um tubo ligado: a conexão sai e o
     furo some no fim do comando.
-14. **Superfície:** `DM_SUPERFICIE` com Acompanhar; edite a superfície (suba um ponto): a tampa
+14. **Superfície:** `HY_SUPERFICIE` com Acompanhar; edite a superfície (suba um ponto): a tampa
     acompanha no fim do comando.
-15. **Osnap e dica:** `DM_OSNAP Ligar`; desenhe uma linha e passe perto de um conector: o glifo
+15. **Osnap e dica:** `HY_OSNAP Ligar`; desenhe uma linha e passe perto de um conector: o glifo
     magenta aparece. Pare o cursor sobre o PV: a dica mostra o `modelos.dica`. Botão direito sobre
     o PV selecionado: o grupo HYDRO tem Editar, Conectar, Atualizar, Informações e Mostrar no painel.
 16. **Boca de bueiro:** insira `boca_bueiro`, gire a ala pelo grip circular (ciano) e confira o corte
     em rampa do topo das alas (`cortar`). Troque Tipo para Triplo e veja os três furos e conectores.
-17. **Auditoria:** `DM_AUDITAR` num desenho com dispositivos da versão anterior: acusa esquema 1 e
+17. **Auditoria:** `HY_AUDITAR` num desenho com dispositivos da versão anterior: acusa esquema 1 e
     migra com Corrigir.
-18. **Rede em cadeia:** `DM_REDE` → PV retangular → rede "Teste", Ø 0,40, 0,5 %, com superfície.
+18. **Rede em cadeia:** `HY_REDE` → PV retangular → rede "Teste", Ø 0,40, 0,5 %, com superfície.
     Clique 4 pontos: cada PV nasce com estrutura nula e o tubo desde o anterior, com furos dos dois
     lados; a elevação de fundo desce 0,5 % por trecho. Desfazer remove o último trecho. Aceite numerar:
     PV-1 a PV-4 no sentido do fluxo.
 19. **Seguir o PV:** MOVE de um PV da rede: a estrutura e as pontas dos tubos acompanham; os furos
-    se refazem. Num PV com tubo solto (sem estrutura), `DM_PONTAS Ajustar Corrigir` e mova o PV.
+    se refazem. Num PV com tubo solto (sem estrutura), `HY_PONTAS Ajustar Corrigir` e mova o PV.
 20. **Painel Redes:** a rede aparece com dispositivos, trechos, extensão e as setas do fluxo no monitor;
     as abas Dispositivos e Trechos listam ordem, elevações e declividades.
-21. **Projeção em perfil:** crie alinhamento, perfil e ProfileView passando pelos PVs. `DM_PROJETAR`
+21. **Projeção em perfil:** crie alinhamento, perfil e ProfileView passando pelos PVs. `HY_PROJETAR`
     (Enter = todos) → a vista → Padrão → Ambos → Enter. Cada PV aparece cortado: arestas da face
-    cortada, hachura ANSI31, silhueta e eixo, nas camadas DM-PERFIL-*. Edite um PV (H maior): a
+    cortada, hachura ANSI31, silhueta e eixo, nas camadas HY-PERFIL-*. Edite um PV (H maior): a
     projeção se refaz. Selecione a projeção: o losango do fundo arrasta a elevação de fundo com
     prévia; ao soltar, o PV e a projeção se refazem. Mova um PV para 15 m do eixo: com distância
     máxima 10 m ele some (a lista de Saídas diz por quê).
 22. **Estilo de projeção:** no painel, Saídas → estilo Padrão → mude a hachura para AR-CONC, escala
     0,05, ligue "ocultas" → Salvar → Atualizar saídas.
-23. **Rótulo e tabela:** `DM_ROTULO` num PV com o modelo padrão; edite o PV: o texto muda; mova o
-    PV: o rótulo vai junto. `DM_TABELA` (Enter = todos, Padrao): insira um PV novo e veja a tabela
+23. **Rótulo e tabela:** `HY_ROTULO` num PV com o modelo padrão; edite o PV: o texto muda; mova o
+    PV: o rótulo vai junto. `HY_TABELA` (Enter = todos, Padrao): insira um PV novo e veja a tabela
     ganhar a linha no fim do comando.
-24. **Estilo de dispositivo:** `DM_ESTILO Criar` a partir de um PV ("PV prancha"); no painel, deixe
-    "degraus" invisível e a camada do concreto C-PV → Salvar e refazer; `DM_ESTILO Aplicar`.
+24. **Estilo de dispositivo:** `HY_ESTILO Criar` a partir de um PV ("PV prancha"); no painel, deixe
+    "degraus" invisível e a camada do concreto C-PV → Salvar e refazer; `HY_ESTILO Aplicar`.
 
 ### Limitações atuais e próximos passos
 
 - A categoria `linear` (seção varrida ao longo de alinhamento/perfil, para sarjetas e valetas)
   ainda não tem gerador.
 - O grip pede o ponto final, mas ainda não mostra a prévia da geometria durante o arrasto.
-- A superfície não é acompanhada automaticamente: rode `DM_SUPERFICIE` de novo.
+- A superfície não é acompanhada automaticamente: rode `HY_SUPERFICIE` de novo.
 - **Presets de catálogo:** escolher um código do álbum DNIT IPR 736 preencherá as dimensões, e
   editar uma dimensão manualmente mudará o código para "genérico".
 - Nós SWMM de armazenamento (storage) e de descarga (outfall), e exportação dos condutos.
