@@ -30,7 +30,7 @@ public class ReportsTests
     {
         var lines = Reports.QuantitiesCsv(TwoPvs()).Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("dispositivo;tipo;versao;quantitativo;unidade;valor", lines[0]);
-        Assert.Contains("PV-01;pv_retangular;1.0.0;concreto_m3;m3;1.5525", lines);
+        Assert.Contains("PV-01;pv_retangular;1.1.0;concreto_m3;m3;1.5525", lines);
         Assert.Contains(lines, l => l.StartsWith("TOTAL;;;concreto_m3;m3;"));
     }
 

@@ -61,7 +61,7 @@ internal static class DeviceService
         if (Math.Abs(reference.Position.Z) > 1e-9)
         {
             values = DeviceEditing.ShiftElevations(definition, values, reference.Position.Z);
-            messages.Add($"movido {reference.Position.Z:0.###} m na vertical: cotas ajustadas");
+            messages.Add($"movido {reference.Position.Z:0.###} m na vertical: elevações ajustadas");
         }
 
         var instance = definition.Evaluate(values);

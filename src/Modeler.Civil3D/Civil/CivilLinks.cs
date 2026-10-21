@@ -5,6 +5,7 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.Civil.DatabaseServices;
 using Modeler.Civil3D.Geometry;
 using Modeler.Core.Definition;
+using Modeler.Core.Editing;
 using Modeler.Core.Geometry;
 using Modeler.Core.Results;
 using CivilSurface = Autodesk.Civil.DatabaseServices.Surface;
@@ -93,9 +94,22 @@ internal static class CivilLinks
 
         foreach (var target in definition.Parameters.Where(p => p.Target == TargetKind.Tubo && p.IsNumeric))
         {
-            values[target.Name] = inverts.Min();
-            messages.Add($"{target.Name} = {inverts.Min():0.###} (menor cota de fundo dos tubos)");
+            SetEdited(definition, values, target.Name, inverts.Min(), messages);
+            messages.Add($"{target.Name} = {inverts.Min():0.###} (menor elevação de fundo dos tubos)");
         }
+    }
+
+    /// <summary>Valor vindo de um alvo (tubo, superfície) entra como uma edição: as regras de
+    /// <c>ao_editar</c> (H ↔ elevações) e os códigos de catálogo valem também aqui.</summary>
+    private static void SetEdited(DeviceDefinition definition, Dictionary<string, object> values, string name, object value, List<string> messages)
+    {
+        var edited = DeviceEditing.Edit(definition, values, name, value, out var notes);
+        foreach (var (key, v) in edited)
+        {
+            values[key] = v;
+        }
+
+        messages.AddRange(notes);
     }
 
     /// <summary>Cota da superfície no ponto de inserção para os parâmetros com <c>alvo: superficie</c>.</summary>
@@ -115,7 +129,7 @@ internal static class CivilLinks
         var changed = false;
         foreach (var target in definition.Parameters.Where(p => p.Target == TargetKind.Superficie && p.IsNumeric))
         {
-            values[target.Name] = elevation;
+            SetEdited(definition, values, target.Name, elevation, messages);
             changed = true;
         }
 

@@ -1,0 +1,170 @@
+# Boca de lobo simples: caixa coletora de concreto sob a sarjeta, com entrada por grelha, pela
+# guia (abertura sob a guia chapéu) ou combinada. Geometria simplificada para o modelo.
+# Sistema local: X ao longo da guia (sentido do meio-fio), +Y para o passeio, origem no centro da
+# caixa; Z = elevação absoluta. Unidades: m, m², m³; ângulos em graus.
+
+dispositivo: boca_lobo_simples
+nome: Boca de lobo simples
+versao: 1.0.0
+categoria: pontual
+familia: Boca de lobo
+subtipo: Concreto
+codigo: "{se(Tipo == 'Grelha', 'BLG', se(Tipo == 'Guia', 'BLC', 'BLCG'))}-{L*100:0:p}"
+descricao: >
+  Boca de lobo simples: caixa coletora retangular, grelha de ferro fundido na sarjeta
+  (tipos Grelha e Combinada) e abertura sob a guia chapéu, com o canto de entrada
+  chanfrado (tipos Guia e Combinada). Furos e conectores para os tubos de saída.
+modelos:
+  nome: "BL-{numero:0:p}"
+  dica: "{codigo} ({Tipo})\nElevação da sarjeta: {CotaTampa:m:3}\nElevação do fundo: {CotaFundo:m:3}"
+
+parametros:
+  Tipo:
+    tipo: texto
+    valores: [Grelha, Guia, Combinada]
+    padrao: Combinada
+    rotulo: Entrada
+    grupo: Tipo
+  L:
+    tipo: comprimento
+    padrao: 1.00
+    min: 0.60
+    max: 2.00
+    rotulo: Comprimento interno (ao longo da guia)
+    grupo: Geometria
+    grip: { eixo: x, posicao: "[Lext/2, 0, CotaTampa]", fator: 2 }
+  B:
+    tipo: comprimento
+    padrao: 0.60
+    min: 0.40
+    max: 1.20
+    rotulo: Largura interna
+    grupo: Geometria
+  esp:
+    tipo: comprimento
+    padrao: 0.15
+    min: 0.10
+    max: 0.30
+    rotulo: Espessura das paredes e do fundo
+    grupo: Geometria
+  CotaTampa:
+    tipo: cota
+    padrao: 100.00
+    rotulo: Elevação da sarjeta (topo da grelha)
+    grupo: Elevações
+    alvo: superficie
+    grip: { eixo: z, posicao: "[0, 0, CotaTampa]" }
+  CotaFundo:
+    tipo: cota
+    padrao: 99.00
+    rotulo: Elevação do fundo (interna)
+    grupo: Elevações
+    alvo: tubo
+  H:
+    tipo: comprimento
+    padrao: 1.00
+    min: 0.60
+    max: 3.00
+    rotulo: Profundidade (sarjeta ao fundo)
+    grupo: Elevações
+  AltGuia:
+    tipo: comprimento
+    padrao: 0.15
+    min: 0.10
+    max: 0.30
+    rotulo: Altura da guia (abertura de entrada)
+    grupo: Guia
+  esp_grelha:
+    tipo: comprimento
+    padrao: 0.05
+    min: 0.03
+    max: 0.10
+    rotulo: Espessura da grelha
+    grupo: Grelha
+  Conexoes:
+    tipo: conexoes
+    padrao: []
+    descricao: Tubos de saída {nome, angulo, cota, diametro, diametro_externo}
+
+ao_editar:
+  H: { CotaFundo: CotaTampa - H }
+  CotaFundo: { H: CotaTampa - CotaFundo }
+  CotaTampa: { H: CotaTampa - CotaFundo }
+
+variaveis:
+  Hu: CotaTampa - CotaFundo
+  Lext: L + 2*esp
+  Bext: B + 2*esp
+  tem_grelha: Tipo != "Guia"
+  tem_guia: Tipo != "Grelha"
+  topo: CotaTampa - esp_grelha
+  # guia chapéu: peça sobre a parede do lado do passeio, acima da abertura de entrada
+  y_guia: B/2
+  esp_chapeu: 0.15
+  z_chapeu: CotaTampa + AltGuia
+
+validacoes:
+  - condicao: Hu >= 0.60
+    mensagem: "Profundidade {Hu:m:2} menor que o mínimo de 0,60 m"
+  - condicao: abs(Hu - H) < 0.001
+    mensagem: "H = {H:m:2} difere das elevações ({Hu:m:2}); a geometria usa as elevações"
+    nivel: aviso
+
+fluxo:
+  - corpo = subtrair(extrudar(retangulo(Lext, Bext, [0, 0, CotaFundo - esp]), topo - CotaFundo + esp),
+                     extrudar(retangulo(L, B, [0, 0, CotaFundo]), topo - CotaFundo))
+
+  - furos_m3 = 0
+  - para cada: c em Conexoes
+    faca:
+      - a = rad(c.angulo)
+      - dist = min(se(abs(cos(a)) > 1e-9, (Lext/2) / abs(cos(a)), 1e9), se(abs(sin(a)) > 1e-9, (Bext/2) / abs(sin(a)), 1e9))
+      - zc = c.cota + c.diametro/2
+      - d_furo = c.diametro_externo + 0.10
+      - corpo = subtrair(corpo, rotacionar(cilindro(d_furo, dist + 0.05, [0, 0, zc], "x"), c.angulo))
+      - furos_m3 = furos_m3 + pi * d_furo^2 / 4 * esp
+      - conector(c.nome, polar(c.angulo, dist, zc), [cos(a), sin(a), 0], c.diametro, "tubo")
+
+  # Tampo: grelha no vão interno (Grelha, Combinada) ou laje fechada (Guia).
+  - laje = extrudar(retangulo(Lext, Bext, [0, 0, topo]), esp_grelha)
+  - se: tem_grelha
+    entao:
+      - n_barras = floor(round((L - 0.03) / 0.05, 6))
+      - barras = array(prisma(0.02, B, esp_grelha, [-L/2 + 0.025, 0, topo]), n_barras, [0.05, 0, 0])
+      - moldura = subtrair(laje, extrudar(retangulo(L, B, [0, 0, topo]), esp_grelha))
+      - expor_solido("grelha", unir(barras, moldura), "Ferro fundido")
+      - grelha_un = 1
+    senao:
+      - expor_solido("laje", laje, "Concreto")
+      - grelha_un = 0
+
+  # Guia chapéu (Guia, Combinada): seção no plano YZ extrudada ao longo de X, com o canto de
+  # entrada (de baixo, do lado da rua) chanfrado por um plano a 45°.
+  - chapeu_m3 = 0
+  - se: tem_guia
+    entao:
+      - secao = polilinha([[-Lext/2, y_guia, z_chapeu], [-Lext/2, y_guia + esp + esp_chapeu, z_chapeu],
+                           [-Lext/2, y_guia + esp + esp_chapeu, z_chapeu + esp_chapeu], [-Lext/2, y_guia, z_chapeu + esp_chapeu]])
+      - chanfro = plano3([0, y_guia, z_chapeu + 0.05], [1, y_guia, z_chapeu + 0.05], [0, y_guia + 0.05, z_chapeu])
+      - chapeu = cortar(extrudar(secao, Lext, "x"), chanfro)
+      - expor_solido("guia_chapeu", chapeu, "Concreto")
+      - chapeu_m3 = Lext * (esp + esp_chapeu) * esp_chapeu - Lext * 0.05 * 0.05 / 2
+
+  - expor_solido("concreto", corpo, "Concreto")
+
+saidas:
+  hidraulica:
+    swmm_juncao:
+      cota_fundo: CotaFundo
+      profundidade_maxima: Hu
+  quantitativos:
+    concreto_m3:
+      valor: Lext * Bext * (topo - CotaFundo + esp) - L * B * (topo - CotaFundo) - furos_m3
+      descricao: Concreto da caixa (fundo + paredes), descontados os furos
+    guia_chapeu_m3:
+      valor: chapeu_m3
+      descricao: Concreto da guia chapéu (com o chanfro)
+    grelha_un: grelha_un
+    escavacao_m3:
+      valor: (Lext + 0.60) * (Bext + 0.60) * (Hu + esp + 0.05)
+      descricao: Escavação com folga de 0,30 m e lastro de 5 cm

@@ -84,9 +84,9 @@ internal sealed class DevicesCategory : IPanelCategory
             new[] { "Escolha o arquivo." }, "DM_SWMM "),
     };
 
-    public string[] Columns => new[] { "Nome", "Dispositivo", "Versão", "X", "Y", "Rotação", "Conexões", "Situação" };
+    public string[] Columns => new[] { "Nome", "Código", "Dispositivo", "Versão", "X", "Y", "Rotação", "Conexões", "Situação" };
 
-    public double[] Widths => new double[] { 120, 150, 60, 90, 90, 60, 70, 200 };
+    public double[] Widths => new double[] { 110, 110, 150, 60, 90, 90, 60, 70, 200 };
 
     public IReadOnlyList<PanelRow> Rows => _rows;
 
@@ -109,6 +109,7 @@ internal sealed class DevicesCategory : IPanelCategory
             _rows.Add(new PanelRow(item.Handle, "DISPOSITIVOS", new[]
             {
                 item.Name,
+                item.Instance?.Code ?? "",
                 item.Definition?.Name ?? item.Record.DefinitionId,
                 item.Record.DefinitionVersion,
                 N(item.Placement.Origin.X),
@@ -298,7 +299,9 @@ internal sealed class DevicesCategory : IPanelCategory
     {
         var ui = new PanelUi(host.Theme).Section("Identificação")
             .Prop("Nome", item.Name)
+            .Prop("Código", item.Instance?.Code ?? "(sem código)")
             .Prop("Dispositivo", item.Definition?.Name ?? item.Record.DefinitionId)
+            .Prop("Família", item.Definition?.Family ?? "")
             .Prop("Definição", $"{item.Record.DefinitionId} {item.Record.DefinitionVersion}", warn: item.Stale)
             .Prop("Arquivo", item.Definition?.SourceFile ?? item.Record.SourceFile)
             .Prop("Handle", item.Handle)

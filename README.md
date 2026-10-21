@@ -77,6 +77,11 @@ aplicar translação em XY e rotação em Z.
 | `validacoes`  | | regras verificadas antes do fluxo |
 | `fluxo`       | | lista de instruções que montam os sólidos |
 | `saidas`      | | sólidos, conectores, hidráulica e quantitativos declarativos |
+| `familia`, `subtipo` | | textos de catálogo (família e material), para a lista, os rótulos e as tabelas |
+| `codigo`      | | modelo de texto do código da instância (`"PV-{L*100:0:p}x{B*100:0:p}"`); vira o nome `codigo` nas validações, no fluxo e nas saídas |
+| `modelos`     | | `nome` e `dica` (tooltip) da instância, modelos de texto |
+| `predefinicoes` | | códigos de catálogo que preenchem dimensões (ver "Linguagem v2") |
+| `ao_editar`   | | redundâncias resolvidas na edição (ex.: `H` ↔ elevações) |
 
 O parser rejeita campos desconhecidos, sugerindo o nome provável:
 `campo desconhecido 'minimo' (você quis dizer 'min'?)`.
@@ -268,6 +273,96 @@ Precedência, da mais fraca para a mais forte: `ou` → `e` → `nao` → compar
 Dimensões precisam ser maiores que zero:
 `prisma: 'H' deve ser maior que zero (recebido 0)`.
 
+### Linguagem v2
+
+#### Perfis, extrusão e corte
+
+| Função | Resultado | Descrição |
+|--------|-----------|-----------|
+| `polilinha(pontos, fechada=verdadeiro, convexidades=[], z=0)` | perfil | vértices `[x, y]` (na elevação `z`) ou `[x, y, z]`, coplanares; `convexidades` é o bulge de cada trecho, como no AutoCAD (positivo = arco anti-horário visto de cima, qualquer que seja a ordem dos vértices) |
+| `retangulo(L, B, centro=[0,0,0], rotacao=0)` | perfil | retângulo L (X) × B (Y) centrado, girado em graus |
+| `circulo(centro, raio)` | perfil | círculo em planta (dois arcos) |
+| `extrudar(perfil, altura, direcao="z")` | sólido (`ExtrudeNode`) | extrusão de um perfil fechado; a direção não pode estar no plano do perfil |
+| `plano(origem, normal)`, `plano3(p1, p2, p3)` | plano | `plano3`: normal = (p2 − p1) × (p3 − p1) |
+| `cortar(solido, plano)` | sólido (`CutNode`) | **fica a parte do lado para onde a normal aponta** |
+
+Pontos e vetores somam (`P1 + [0.3, 0, 0]`), subtraem e escalam (`2 * u`, `v / 2`). Há também
+`distancia`, `distancia2d`, `normalizar`, `cruz` e `escalar` (produto escalar).
+
+#### `nulo`, `existe()` e `ou()`
+
+`nulo` é a ausência de valor. `existe(x)` e `ou(x, alternativa, ...)` são preguiçosas e absorvem
+**só** a falta de valor (nulo, campo ausente num registro, índice fora da lista): `existe(c.sentido)`,
+`ou(c.sentido, "entrada")`. Qualquer outro erro continua sendo erro (`ou(1/0, 2)` falha). O operador
+`a ou b` continua valendo; `ou(` na posição de valor é a função.
+
+#### `escolha` e `mensagem`
+
+```yaml
+fluxo:
+  - escolha: Tipo
+    casos:
+      Simples: [ "ys = [0]" ]
+      Duplo:   [ "ys = [-passo/2, passo/2]" ]
+    padrao:
+      - ys = [-passo, 0, passo]
+  - mensagem: "Tipo {Tipo} com {tamanho(ys)} tubo(s)"   # vai para inst.Log
+```
+
+Se o valor é um parâmetro com `valores`, as chaves são conferidas na carga (com sugestão) e, sem
+`padrao`, todos os valores precisam de caso. Sem caso nem `padrao` na avaliação, é erro.
+
+#### Modelos de texto e formatação
+
+Mensagens de validação, `codigo`, `modelos.nome`, `modelos.dica` e `mensagem` usam o mesmo motor:
+campos `{expressão}` ou `{expressão:formato}`, com `{{`/`}}` para escrever chaves. Sem formato, o
+valor sai como na linguagem (`1.5`); com formato, em pt-BR (vírgula decimal, ponto de milhar). As
+partes do formato vão em qualquer ordem:
+
+| Parte | Efeito | Exemplo |
+|-------|--------|---------|
+| unidade: `m cm mm km m2 cm2 ha km2 m3 m3/s % grau un kg t` | converte da unidade de base e põe o símbolo | `{H:cm:0}` → `150 cm`; `{i:%:2}` (i = 0,005) → `0,50 %` |
+| número | casas decimais | `{H:m:3}` → `1,500 m` |
+| `n` | sem o símbolo | `{H:m:2:n}` → `1,50` |
+| `p` | ponto decimal, sem milhar | `{numero:0:p}` → `7` |
+| `sinal` | sempre com + ou − | `+0,30 m` |
+| `estaca` | estaca de 20 m | `{x:estaca}` → `12 + 3,45` |
+| `maiusc`, `minusc`, `titulo` | caixa do texto | |
+
+Litros (`l`, `l/s`) são recusados: o modelador trabalha em m³ e m³/s. Nos modelos `nome` e `dica`
+valem parâmetros, variáveis, quantitativos e `codigo`, `nome`, `numero`, `familia`, `subtipo` e
+`dispositivo` (`inst.Render(modelo, extras)`).
+
+#### `predefinicoes`: códigos de catálogo
+
+```yaml
+predefinicoes:
+  parametro: Catalogo            # texto; os valores permitidos viram "generico" + os códigos
+  ao_editar_dimensao: generico   # ou reaplicar
+  comuns: { esp: 0.15 }
+  itens:
+    CL-60x60: { L: 0.60, B: 0.60 }
+    CL-100x100: { L: 1.00, B: 1.00, esp: 0.20 }
+```
+
+Com um código diferente de `generico`, as dimensões dele mandam na avaliação. Na edição
+(`DeviceEditing.Edit`, usado pela janela de parâmetros, pelos grips e pelos alvos), escolher um
+código aplica as dimensões; mudar uma dimensão que o código preenche troca o código para
+`generico` (ou desfaz a mudança, com `reaplicar`). Tudo é conferido na carga: nomes, `min`/`max`,
+`valores` e o padrão do parâmetro do código.
+
+#### `ao_editar` e `editado()`
+
+```yaml
+ao_editar:
+  H:         { CotaFundo: CotaTampa - H }        # editou H → recalcula CotaFundo
+  CotaFundo: { H: CotaTampa - CotaFundo }
+```
+
+Roda na edição, antes da avaliação, com os parâmetros já editados; o resultado é validado
+(`min`/`max`). Uma regra não pode reescrever o próprio parâmetro editado. `editado()` devolve o
+nome do último parâmetro editado (vazio fora da edição).
+
 ---
 
 ## Exemplo completo
@@ -282,6 +377,15 @@ com estes parâmetros: `L`, `B`, `esp`, `CotaFundo`, `CotaTampa`, `tampa` (lista
 - um furo e um conector para cada conexão, com o volume dos furos descontado do concreto;
 - um nó de junção SWMM;
 - os quantitativos `concreto_m3`, `forma_m2`, `escavacao_m3`, `lastro_m3` e `degraus_un`.
+
+Outros dispositivos do catálogo (`catalog/drenagem/`), que usam a linguagem v2. As dimensões dos
+códigos são de referência e precisam ser conferidas com o álbum adotado no projeto:
+
+| Arquivo | Dispositivo | Mostra |
+|---------|-------------|--------|
+| `caixa_ligacao.yaml` | caixa de ligação/passagem (códigos CL-60x60 a CL-120x120) | `extrudar`/`retangulo`/`circulo`, `predefinicoes`, `ao_editar` (H ↔ elevações), `escolha` da tampa (concreto, grelha, tampão), `codigo`, `modelos`, `mensagem` |
+| `boca_bueiro.yaml` | boca de bueiro tubular simples, dupla ou tripla (BSTC/BDTC/BTTC) | alas por `polilinha` + `extrudar`, topo em rampa com `cortar(..., plano3(...))`, soma de vetores, `escolha` do número de tubos, um conector por tubo |
+| `boca_lobo_simples.yaml` | boca de lobo com grelha, pela guia ou combinada | grelha com `array`, guia chapéu com seção no plano YZ extrudada em X e chanfro por `cortar` |
 
 Com os valores padrão (L = B = 1,20; esp = 0,15; H = 1,50):
 

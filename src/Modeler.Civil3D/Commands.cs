@@ -37,8 +37,8 @@ public sealed class Commands
     {
         ("DM_INSERIR", "insere um dispositivo do catálogo (janela de parâmetros + ponto + rotação)"),
         ("DM_EDITAR", "edita os parâmetros de um dispositivo"),
-        ("DM_CONECTAR", "liga tubos de Pipe Network a um dispositivo (furos, conectores e cota de fundo)"),
-        ("DM_SUPERFICIE", "ajusta parâmetros com 'alvo: superficie' (cota da tampa) a uma superfície"),
+        ("DM_CONECTAR", "liga tubos de Pipe Network a um dispositivo (furos, conectores e elevação de fundo)"),
+        ("DM_SUPERFICIE", "ajusta parâmetros com 'alvo: superficie' (elevação da tampa) a uma superfície"),
         ("DM_ATUALIZAR", "relê tubos e catálogo e regenera dispositivos"),
         ("DM_QUANTITATIVOS", "soma os quantitativos e exporta CSV"),
         ("DM_SWMM", "exporta as junções para um arquivo .inp do SWMM"),
@@ -183,7 +183,8 @@ public sealed class Commands
         var delta = Solid3dBuilder.ToVec3(Point3d.Origin + (result.Value - pending.Point));
         var localDelta = placement.DirectionToLocal(delta);
         var value = DeviceEditing.GripValue(parameter, current, localDelta);
-        var values = new Dictionary<string, object>(instance.Parameters, StringComparer.Ordinal) { [parameter.Name] = value };
+        var values = DeviceEditing.Edit(definition, instance.Parameters, parameter.Name, value, out var editMessages);
+        Report(record.Name, editMessages);
         Report(record.Name, DeviceService.Regenerate(tr, reference, definition, record, values));
         Ed.WriteMessage($"\n{parameter.Name} = {value:0.###} {parameter.Unit}");
         tr.Commit();
@@ -529,7 +530,7 @@ public sealed class Commands
     private static ObjectId PickSurface(bool optional)
     {
         var options = new PromptEntityOptions(optional
-            ? "\nSuperfície para a cota da tampa <Enter = pular>: "
+            ? "\nSuperfície para a elevação da tampa <Enter = pular>: "
             : "\nSelecione a superfície: ") { AllowNone = optional };
         options.SetRejectMessage("\nSelecione uma superfície do Civil 3D.");
         options.AddAllowedClass(typeof(CivilSurface), false);

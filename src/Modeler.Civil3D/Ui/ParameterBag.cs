@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using Modeler.Core.Definition;
+using Modeler.Core.Editing;
 using Modeler.Core.Errors;
 using CoreValues = Modeler.Core.Expressions.Values;
 
@@ -32,6 +33,11 @@ internal sealed class ParameterBag : CustomTypeDescriptor
     public Dictionary<string, object> Values { get; }
 
     public string InstanceName { get; set; }
+
+    /// <summary>Último parâmetro editado (para <c>editado()</c>) e o que a edição mudou além dele.</summary>
+    public string? LastEdited { get; private set; }
+
+    public IReadOnlyList<string> LastMessages { get; private set; } = Array.Empty<string>();
 
     public override PropertyDescriptorCollection GetProperties() => GetProperties(Array.Empty<Attribute>());
 
@@ -123,7 +129,16 @@ internal sealed class ParameterBag : CustomTypeDescriptor
         {
             try
             {
-                ((ParameterBag)component!).Values[_parameter.Name] = _parameter.Coerce(value);
+                // como o grip: código de catálogo → "generico" e regras de ao_editar
+                var bag = (ParameterBag)component!;
+                var edited = DeviceEditing.Edit(bag.Definition, bag.Values, _parameter.Name, value, out var messages);
+                foreach (var (name, v) in edited)
+                {
+                    bag.Values[name] = v;
+                }
+
+                bag.LastEdited = _parameter.Name;
+                bag.LastMessages = messages;
             }
             catch (ParameterValidationException ex)
             {
@@ -155,7 +170,7 @@ internal sealed class ParameterBag : CustomTypeDescriptor
                 ? list.Count == 0
                     ? "(nenhuma — use DM_CONECTAR)"
                     : string.Join("; ", list.OfType<IReadOnlyDictionary<string, object>>().Select(c =>
-                        $"{c["nome"]}: {CoreValues.FormatNumber((double)c["angulo"])}°, cota {CoreValues.FormatNumber((double)c["cota"])}, Ø {CoreValues.FormatNumber((double)c["diametro"])}"))
+                        $"{c["nome"]}: {CoreValues.FormatNumber((double)c["angulo"])}°, elevação {CoreValues.FormatNumber((double)c["cota"])}, Ø {CoreValues.FormatNumber((double)c["diametro"])}"))
                 : CoreValues.Format(value);
     }
 

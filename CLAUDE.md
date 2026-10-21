@@ -146,6 +146,17 @@ O que se aprendeu:
   com um botão por categoria, e `DM_IR` (seleciona por handle).
 - Core: `Affine` e `PlanOutline` (planta esquemática da árvore CSG para o monitor).
 
+**HYDRO F1 (linguagem v2), implementada e coberta por testes no Core:**
+- `polilinha`/`retangulo`/`circulo` (perfil), `extrudar` (`ExtrudeNode`), `plano`/`plano3`,
+  `cortar` (`CutNode`, fica o lado da normal), vetores (`+ - *`), `nulo`/`existe()`/`ou()`.
+- `escolha`/`casos`/`padrao`, `mensagem` (`inst.Log`).
+- `familia`, `subtipo`, `codigo` (vira o nome `codigo`), `modelos.nome`/`modelos.dica`.
+- Motor de macros `Text/Template` + `FormatSpec` (`{H:m:3}`, pt-BR, sem litros).
+- `predefinicoes` e `ao_editar`/`editado()`, aplicados por `DeviceEditing.Edit` (janela de
+  parâmetros, DM_GRIP e alvos tubo/superfície passam por ele).
+- Catálogo: `catalog/drenagem/` com caixa de ligação, boca de bueiro e boca de lobo simples.
+- `cortar` no plugin usa `Solid3d.Slice` e confere o lado pelo centroide (não testado no CAD).
+
 **Padrão de interface:** o painel do Viário (github.com/heyttor-camelo/Civil3D2026Plugin,
 `docs/DEVELOPMENT.md` §8). Esc nunca fecha janela; ícones vetoriais 32×32 com cores de significado;
 "elevação" para altura de ponto em textos de interface ("cota" é dimensão).

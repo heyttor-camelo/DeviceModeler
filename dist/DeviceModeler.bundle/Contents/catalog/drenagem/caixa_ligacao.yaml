@@ -1,0 +1,204 @@
+# Caixa de ligação/passagem retangular de concreto, com tampa de concreto, grelha ou tampão.
+# Sistema local: X/Y a partir do centro da caixa (ponto de inserção), Z = elevação absoluta.
+# Unidades: metros, m², m³; ângulos em graus.
+# Dimensões dos códigos: valores de referência para o exemplo; confira com o padrão adotado no
+# projeto antes de usar.
+
+dispositivo: caixa_ligacao
+nome: Caixa de ligação
+versao: 1.0.0
+categoria: pontual
+familia: Caixa de ligação
+subtipo: Concreto moldado no local
+codigo: "{se(Catalogo == 'generico', 'CL-' + arred(L*100) + 'x' + arred(B*100), Catalogo)}"
+descricao: >
+  Caixa retangular de concreto (fundo + paredes) com tampa removível. A tampa pode ser
+  de concreto, grelha de ferro fundido ou tampão circular. Furos e conectores para os
+  tubos ligados. Os códigos CL-60x60 a CL-120x120 preenchem as dimensões internas;
+  editar uma dimensão muda o código para "generico".
+modelos:
+  nome: "CL-{numero:0:p}"
+  dica: "{codigo} ({TipoTampa})\nElevação da tampa: {CotaTampa:m:3}\nElevação do fundo: {CotaFundo:m:3}\nAltura útil: {Hu:m:2}"
+
+parametros:
+  Catalogo:
+    tipo: texto
+    padrao: CL-80x80
+    rotulo: Código
+    grupo: Catálogo
+  L:
+    tipo: comprimento
+    padrao: 0.80
+    min: 0.40
+    max: 2.00
+    rotulo: Comprimento interno
+    grupo: Geometria
+    grip: { eixo: x, posicao: "[Lext/2, 0, CotaTampa]", fator: 2 }
+  B:
+    tipo: comprimento
+    padrao: 0.80
+    min: 0.40
+    max: 2.00
+    rotulo: Largura interna
+    grupo: Geometria
+    grip: { eixo: y, posicao: "[0, Bext/2, CotaTampa]", fator: 2 }
+  esp:
+    tipo: comprimento
+    padrao: 0.15
+    min: 0.10
+    max: 0.30
+    rotulo: Espessura das paredes
+    grupo: Geometria
+  esp_fundo:
+    tipo: comprimento
+    padrao: 0.15
+    min: 0.10
+    max: 0.30
+    rotulo: Espessura do fundo
+    grupo: Geometria
+  CotaTampa:
+    tipo: cota
+    padrao: 101.00
+    rotulo: Elevação da tampa
+    grupo: Elevações
+    alvo: superficie
+    grip: { eixo: z, posicao: "[0, 0, CotaTampa]" }
+  CotaFundo:
+    tipo: cota
+    padrao: 100.00
+    rotulo: Elevação do fundo (interna)
+    grupo: Elevações
+    alvo: tubo
+  H:
+    tipo: comprimento
+    padrao: 1.00
+    min: 0.40
+    max: 4.00
+    rotulo: Altura útil (fundo à tampa)
+    grupo: Elevações
+    descricao: Editar H move o fundo; editar uma elevação recalcula H.
+  TipoTampa:
+    tipo: texto
+    valores: [Concreto, Grelha, Tampao]
+    padrao: Concreto
+    rotulo: Tampa
+    grupo: Acabamento
+  esp_tampa:
+    tipo: comprimento
+    padrao: 0.08
+    min: 0.05
+    max: 0.20
+    rotulo: Espessura da tampa
+    grupo: Acabamento
+  folga:
+    tipo: comprimento
+    padrao: 0.30
+    min: 0.00
+    max: 1.00
+    rotulo: Folga lateral da escavação
+    grupo: Escavação
+  lastro:
+    tipo: comprimento
+    padrao: 0.05
+    min: 0.00
+    max: 0.30
+    rotulo: Lastro sob o fundo
+    grupo: Escavação
+  Conexoes:
+    tipo: conexoes
+    padrao: []
+    descricao: Tubos ligados {nome, angulo, cota, diametro, diametro_externo}
+
+predefinicoes:
+  parametro: Catalogo
+  ao_editar_dimensao: generico
+  comuns: { esp: 0.15, esp_fundo: 0.15 }
+  itens:
+    CL-60x60: { L: 0.60, B: 0.60 }
+    CL-80x80: { L: 0.80, B: 0.80 }
+    CL-100x100: { L: 1.00, B: 1.00, esp: 0.20 }
+    CL-120x120: { L: 1.20, B: 1.20, esp: 0.20, esp_fundo: 0.20 }
+
+ao_editar:
+  H: { CotaFundo: CotaTampa - H }
+  CotaFundo: { H: CotaTampa - CotaFundo }
+  CotaTampa: { H: CotaTampa - CotaFundo }
+
+variaveis:
+  Hu:
+    valor: CotaTampa - CotaFundo
+    unidade: m
+    descricao: Altura útil pelas elevações
+  Lext: L + 2*esp
+  Bext: B + 2*esp
+  topo_corpo: CotaTampa - esp_tampa
+  d_tampao: min(0.60, min(L, B) - 0.05)
+
+validacoes:
+  - condicao: Hu >= 0.40
+    mensagem: "Altura útil {Hu:m:2} menor que o mínimo de 0,40 m (confira as elevações da tampa e do fundo)"
+  - condicao: abs(Hu - H) < 0.001
+    mensagem: "H = {H:m:2} difere das elevações ({Hu:m:2}); a geometria usa as elevações"
+    nivel: aviso
+  - condicao: TipoTampa != "Tampao" ou d_tampao >= 0.40
+    mensagem: "Caixa pequena demais para tampão ({d_tampao:m:2}); use tampa de concreto ou grelha"
+
+fluxo:
+  - externo = extrudar(retangulo(Lext, Bext, [0, 0, CotaFundo - esp_fundo]), topo_corpo - CotaFundo + esp_fundo)
+  - interno = extrudar(retangulo(L, B, [0, 0, CotaFundo]), topo_corpo - CotaFundo)
+  - corpo = subtrair(externo, interno)
+
+  # Furo e conector por tubo ligado (como no PV): diâmetro externo + 10 cm, centrado no eixo do tubo.
+  - furos_m3 = 0
+  - para cada: c em Conexoes
+    faca:
+      - a = rad(c.angulo)
+      - dist = min(se(abs(cos(a)) > 1e-9, (Lext/2) / abs(cos(a)), 1e9), se(abs(sin(a)) > 1e-9, (Bext/2) / abs(sin(a)), 1e9))
+      - zc = c.cota + c.diametro/2
+      - d_furo = c.diametro_externo + 0.10
+      - corpo = subtrair(corpo, rotacionar(cilindro(d_furo, dist + 0.05, [0, 0, zc], "x"), c.angulo))
+      - furos_m3 = furos_m3 + pi * d_furo^2 / 4 * esp
+      - conector(c.nome, polar(c.angulo, dist, zc), [cos(a), sin(a), 0], c.diametro, "tubo")
+
+  - placa = extrudar(retangulo(Lext, Bext, [0, 0, topo_corpo]), esp_tampa)
+  - escolha: TipoTampa
+    casos:
+      Concreto:
+        - tampa = placa
+        - tampa_m3 = Lext * Bext * esp_tampa
+      Grelha:
+        # moldura com barras de 2 cm a cada 5 cm sobre o vão interno
+        - n_barras = floor(round((L - 0.03) / 0.05, 6))
+        - barras = array(prisma(0.02, B, esp_tampa, [-L/2 + 0.025, 0, topo_corpo]), n_barras, [0.05, 0, 0])
+        - tampa = unir(subtrair(placa, extrudar(retangulo(L, B, [0, 0, topo_corpo]), esp_tampa)), barras)
+        - tampa_m3 = (Lext * Bext - L * B) * esp_tampa + n_barras * 0.02 * B * esp_tampa
+      Tampao:
+        - furo_tampao = extrudar(circulo([0, 0, topo_corpo], d_tampao/2 + 0.02), esp_tampa)
+        - tampa = subtrair(placa, furo_tampao)
+        - tampao = extrudar(circulo([0, 0, topo_corpo], d_tampao/2), esp_tampa)
+        - expor_solido("tampao", tampao, "Ferro fundido")
+        - tampa_m3 = Lext * Bext * esp_tampa - pi * (d_tampao/2 + 0.02)^2 * esp_tampa
+  - mensagem: "Caixa {codigo} com tampa {TipoTampa}"
+
+  - expor_solido("concreto", corpo, "Concreto")
+  - expor_solido("tampa", tampa, se(TipoTampa == "Grelha", "Ferro fundido", "Concreto"))
+
+saidas:
+  hidraulica:
+    swmm_juncao:
+      cota_fundo: CotaFundo
+      profundidade_maxima: Hu
+  quantitativos:
+    concreto_m3:
+      valor: Lext * Bext * (topo_corpo - CotaFundo + esp_fundo) - L * B * (topo_corpo - CotaFundo) - furos_m3
+      descricao: Concreto do corpo (fundo + paredes), descontados os furos
+    tampa_m3:
+      valor: tampa_m3
+      descricao: Volume da tampa (concreto, grelha ou anel do tampão)
+    forma_m2:
+      valor: 2 * (Lext + Bext) * (topo_corpo - CotaFundo + esp_fundo) + 2 * (L + B) * (topo_corpo - CotaFundo)
+      descricao: Fôrma das faces externas e internas
+    escavacao_m3:
+      valor: (Lext + 2*folga) * (Bext + 2*folga) * (CotaTampa - CotaFundo + esp_fundo + lastro)
+      descricao: Escavação em cava retangular com folga lateral
+    lastro_m3: (Lext + 2*folga) * (Bext + 2*folga) * lastro

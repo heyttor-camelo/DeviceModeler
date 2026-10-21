@@ -42,8 +42,8 @@ internal sealed class ParameterForm : Form
         ShowInTaskbar = false;
 
         var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Width = 90 };
+        // sem CancelButton: Esc nunca fecha janela (padrão do painel); fecha pelo X ou por Cancelar
         AcceptButton = _ok;
-        CancelButton = cancel;
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, Height = 40, Padding = new Padding(6) };
         buttons.Controls.Add(cancel);
         buttons.Controls.Add(_ok);
@@ -71,7 +71,12 @@ internal sealed class ParameterForm : Form
         }
 
         Controls.Add(buttons);
-        _grid.PropertyValueChanged += (_, _) => UpdateSummary();
+        _grid.PropertyValueChanged += (_, _) =>
+        {
+            // um código de catálogo ou uma regra de ao_editar pode ter mudado outros parâmetros
+            _grid.Refresh();
+            UpdateSummary();
+        };
 
         if (catalogErrors is { Count: > 0 })
         {
@@ -123,11 +128,30 @@ internal sealed class ParameterForm : Form
             text.AppendLine(d.Description.Trim());
         }
 
+        if (d.Family is not null)
+        {
+            text.AppendLine($"Família: {d.Family}{(d.Subtype is null ? "" : " — " + d.Subtype)}");
+        }
+
+        foreach (var message in _bag.LastMessages)
+        {
+            text.AppendLine("» " + message);
+        }
+
         text.AppendLine();
         try
         {
-            Instance = d.Evaluate(_bag.Values);
+            Instance = d.Evaluate(_bag.Values, _bag.LastEdited);
             _ok.Enabled = true;
+            if (Instance.Code is not null)
+            {
+                text.AppendLine($"Código: {Instance.Code}");
+            }
+
+            foreach (var line in Instance.Log)
+            {
+                text.AppendLine(line);
+            }
             foreach (var warning in Instance.Warnings)
             {
                 text.AppendLine("AVISO: " + warning);

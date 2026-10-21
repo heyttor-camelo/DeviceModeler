@@ -47,9 +47,9 @@ internal sealed class CatalogCategory : IPanelCategory
             "Abre a janela de inserção com o catálogo.", Array.Empty<string>(), "DM_INSERIR "),
     };
 
-    public string[] Columns => new[] { "Dispositivo", "Id", "Versão", "Categoria", "Arquivo" };
+    public string[] Columns => new[] { "Dispositivo", "Id", "Versão", "Família", "Categoria", "Arquivo" };
 
-    public double[] Widths => new double[] { 200, 150, 60, 70, 300 };
+    public double[] Widths => new double[] { 200, 150, 60, 140, 70, 260 };
 
     public IReadOnlyList<PanelRow> Rows => _rows;
 
@@ -58,10 +58,10 @@ internal sealed class CatalogCategory : IPanelCategory
         var definitions = DeviceCatalog.LoadAll(out var errors);
         _rows = definitions.Select(d => new PanelRow("def:" + d.Id, "CATALOGO", new[]
         {
-            d.Name ?? d.Id, d.Id, d.Version, d.Category.ToString().ToLowerInvariant(), Path.GetFileName(d.SourceFile ?? ""),
+            d.Name ?? d.Id, d.Id, d.Version, d.Family ?? "", d.Category.ToString().ToLowerInvariant(), Path.GetFileName(d.SourceFile ?? ""),
         }, d)).ToList();
         _rows.AddRange(errors.Select((e, i) => new PanelRow("err:" + i.ToString(CultureInfo.InvariantCulture), "VERIFICACAO",
-            new[] { "(arquivo com erro)", "", "", "", e }, e, 2, e)));
+            new[] { "(arquivo com erro)", "", "", "", "", e }, e, 2, e)));
     }
 
     public IEnumerable<PanelTab> Tabs(IPanelHost host, PanelRow? row)
@@ -153,7 +153,13 @@ internal sealed class CatalogCategory : IPanelCategory
             .Prop("Nome", d.Name ?? d.Id)
             .Prop("Id", d.Id)
             .Prop("Versão", d.Version)
-            .Prop("Categoria", d.Category.ToString().ToLowerInvariant());
+            .Prop("Categoria", d.Category.ToString().ToLowerInvariant())
+            .Prop("Família", d.Family ?? "")
+            .Prop("Subtipo", d.Subtype ?? "");
+        if (d.Presets is { } presets)
+        {
+            ui.Prop("Códigos", string.Join(", ", presets.Codes));
+        }
         ui.Prop("Arquivo", d.SourceFile ?? "").Prop("Hash", d.Hash[..Math.Min(12, d.Hash.Length)]);
         if (!string.IsNullOrWhiteSpace(d.Description))
         {

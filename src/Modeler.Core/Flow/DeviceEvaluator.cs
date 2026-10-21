@@ -28,6 +28,17 @@ internal static class DeviceEvaluator
             variables[variable.Name] = value;
         }
 
+        // o código vem logo depois das variáveis: validações, fluxo e saídas podem usar 'codigo'
+        var code = definition.CodeTemplate?.Render(new GlobalScope(new Dictionary<string, object>(globals, StringComparer.Ordinal)
+        {
+            ["familia"] = definition.Family ?? "",
+            ["subtipo"] = definition.Subtype ?? "",
+        }, functions, edited));
+        if (code is not null)
+        {
+            globals["codigo"] = code;
+        }
+
         var warnings = new List<string>();
         foreach (var rule in definition.Validations)
         {
@@ -44,12 +55,6 @@ internal static class DeviceEvaluator
                 }
             }
         }
-
-        var code = definition.CodeTemplate?.Render(new GlobalScope(new Dictionary<string, object>(globals, StringComparer.Ordinal)
-        {
-            ["familia"] = definition.Family ?? "",
-            ["subtipo"] = definition.Subtype ?? "",
-        }, functions, edited));
 
         var scope = new FlowScope(globals, functions, edited);
         var iterations = 0;

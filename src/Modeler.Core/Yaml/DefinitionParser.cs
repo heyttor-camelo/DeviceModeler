@@ -108,12 +108,17 @@ internal sealed partial class DefinitionParser
             }
         }
 
-        definition.Validations = fields.TryGetValue("validacoes", out var r) ? ParseValidations(r, globals) : new List<ValidationDef>();
         if (fields.TryGetValue("codigo", out var codeNode))
         {
             definition.CodeTemplate = Tmpl(codeNode, "codigo");
             CheckTemplate(definition.CodeTemplate, new HashSet<string>(globals.Append("familia").Append("subtipo"), StringComparer.Ordinal));
+            if (!globals.Add("codigo"))
+            {
+                throw new DefinitionException("'codigo' já é parâmetro ou variável e conflita com o campo 'codigo' da definição", Loc(codeNode), "codigo");
+            }
         }
+
+        definition.Validations = fields.TryGetValue("validacoes", out var r) ? ParseValidations(r, globals) : new List<ValidationDef>();
 
         var known = new HashSet<string>(globals, StringComparer.Ordinal);
         definition.Flow = fields.TryGetValue("fluxo", out var f)

@@ -15,7 +15,8 @@ public class PvRetangularTests
     public void Carrega_a_definicao()
     {
         Assert.Equal("pv_retangular", Pv.Id);
-        Assert.Equal("1.0.0", Pv.Version);
+        Assert.Equal("1.1.0", Pv.Version);
+        Assert.Equal("PV-120x120", Pv.Evaluate().Code);
         Assert.Equal(DeviceCategory.Pontual, Pv.Category);
         Assert.Equal(new[] { "L", "B", "esp", "CotaFundo", "CotaTampa", "tampa", "folga", "lastro", "Conexoes" }, Pv.Parameters.Select(p => p.Name));
         Assert.Equal(64, Pv.Hash.Length);

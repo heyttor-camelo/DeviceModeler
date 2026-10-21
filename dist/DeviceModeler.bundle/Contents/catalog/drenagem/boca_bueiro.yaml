@@ -1,0 +1,206 @@
+# Boca de bueiro tubular de concreto (simples, dupla ou tripla): testa, duas alas em ângulo e
+# soleira. Sistema local: origem no eixo do bueiro, na face de jusante da testa; X = sentido do
+# escoamento (para fora do bueiro), Z = elevação absoluta. Unidades: m, m², m³; ângulos em graus.
+# Dimensões dos códigos: valores de referência para o exemplo, inspirados nos álbuns de
+# dispositivos de drenagem; confira com o álbum adotado no projeto (DNIT IPR 736) antes de usar.
+
+dispositivo: boca_bueiro
+nome: Boca de bueiro tubular
+versao: 1.0.0
+categoria: pontual
+familia: Boca de bueiro
+subtipo: Concreto
+codigo: "{prefixo}-{D*100:0:p}{se(Catalogo == 'generico', ' (genérico)', '')}"
+descricao: >
+  Boca de jusante (ou montante) de bueiro tubular: testa com um furo por tubo, alas
+  inclinadas em planta com o topo em rampa e soleira entre as alas. Tipo simples,
+  duplo ou triplo. Os códigos preenchem diâmetro, parede do tubo, folga sobre o tubo
+  e comprimento das alas; editar uma dessas dimensões muda o código para "generico".
+modelos:
+  nome: "BB-{numero:0:p}"
+  dica: "{codigo} ({Tipo})\nØ {D:m:2} × {n_tubos:0:p}\nElevação de fundo: {CotaFundo:m:3}\nTopo da testa: {CotaTopo:m:3}"
+
+parametros:
+  Catalogo:
+    tipo: texto
+    padrao: D100
+    rotulo: Código
+    grupo: Catálogo
+  Tipo:
+    tipo: texto
+    valores: [Simples, Duplo, Triplo]
+    padrao: Simples
+    rotulo: Número de linhas de tubo
+    grupo: Catálogo
+  D:
+    tipo: comprimento
+    padrao: 1.00
+    min: 0.40
+    max: 2.00
+    rotulo: Diâmetro interno do tubo
+    grupo: Tubo
+  e_tubo:
+    tipo: comprimento
+    padrao: 0.08
+    min: 0.03
+    max: 0.25
+    rotulo: Espessura da parede do tubo
+    grupo: Tubo
+  separacao:
+    tipo: comprimento
+    padrao: 0.30
+    min: 0.10
+    max: 1.00
+    rotulo: Distância livre entre tubos
+    grupo: Tubo
+  CotaFundo:
+    tipo: cota
+    padrao: 100.00
+    rotulo: Elevação de fundo do tubo (geratriz inferior)
+    grupo: Elevações
+    alvo: tubo
+  FolgaSup:
+    tipo: comprimento
+    padrao: 0.60
+    min: 0.20
+    max: 2.00
+    rotulo: Altura da testa acima do tubo
+    grupo: Geometria
+    grip: { eixo: z, posicao: "[-Parede/2, 0, CotaTopo]" }
+  Parede:
+    tipo: comprimento
+    padrao: 0.30
+    min: 0.15
+    max: 0.80
+    rotulo: Espessura da testa e das alas
+    grupo: Geometria
+  CompAla:
+    tipo: comprimento
+    padrao: 1.50
+    min: 0.50
+    max: 6.00
+    rotulo: Comprimento das alas
+    grupo: Geometria
+  AngAla:
+    tipo: angulo
+    padrao: 30
+    min: 0
+    max: 60
+    rotulo: Abertura das alas (a partir do eixo)
+    grupo: Geometria
+  AlturaFim:
+    tipo: comprimento
+    padrao: 0.30
+    min: 0.10
+    max: 2.00
+    rotulo: Altura da ala na ponta (acima do fundo)
+    grupo: Geometria
+    grip: { eixo: z, posicao: "[x_fim, w_in + CompAla * sin(a), z_fim]" }
+  Soleira:
+    tipo: comprimento
+    padrao: 0.20
+    min: 0.10
+    max: 0.50
+    rotulo: Espessura da soleira
+    grupo: Geometria
+  margem:
+    tipo: comprimento
+    padrao: 0.25
+    min: 0.10
+    max: 1.00
+    rotulo: Distância do tubo à ala
+    grupo: Geometria
+
+predefinicoes:
+  parametro: Catalogo
+  comuns: { separacao: 0.30, margem: 0.25 }
+  itens:
+    D60: { D: 0.60, e_tubo: 0.06, FolgaSup: 0.40, CompAla: 1.15 }
+    D80: { D: 0.80, e_tubo: 0.07, FolgaSup: 0.50, CompAla: 1.35 }
+    D100: { D: 1.00, e_tubo: 0.08, FolgaSup: 0.60, CompAla: 1.50 }
+    D120: { D: 1.20, e_tubo: 0.10, FolgaSup: 0.70, CompAla: 1.80 }
+    D150: { D: 1.50, e_tubo: 0.12, FolgaSup: 0.80, CompAla: 2.20 }
+
+variaveis:
+  n_tubos: se(Tipo == "Simples", 1, se(Tipo == "Duplo", 2, 3))
+  prefixo: se(Tipo == "Simples", "BSTC", se(Tipo == "Duplo", "BDTC", "BTTC"))
+  De: D + 2*e_tubo
+  passo: De + separacao
+  w_in: (n_tubos * De + (n_tubos - 1) * separacao) / 2 + margem
+  a: rad(AngAla)
+  w_testa: w_in + Parede / cos(a)
+  CotaTopo:
+    valor: CotaFundo + D + e_tubo + FolgaSup
+    unidade: m
+    descricao: Elevação do topo da testa
+  z_base: CotaFundo - Soleira
+  x_fim: CompAla * cos(a)
+  z_fim: CotaFundo + AlturaFim
+  Ht: CotaTopo - z_base
+  area_ala: CompAla * Parede - Parede^2 * tan(a) / 2
+  vol_testa: Parede * 2 * w_testa * Ht - n_tubos * pi * De^2 / 4 * Parede
+  vol_alas: 2 * area_ala * (Ht + (z_fim - z_base)) / 2
+  vol_soleira: (2 * w_in + CompAla * sin(a)) * x_fim * Soleira
+
+validacoes:
+  - condicao: z_fim < CotaTopo
+    mensagem: "A ponta da ala ({z_fim:m:3}) fica acima do topo da testa ({CotaTopo:m:3}): reduza AlturaFim"
+  - condicao: Soleira >= e_tubo + 0.05
+    mensagem: "A soleira ({Soleira:m:2}) precisa ser ao menos 5 cm mais espessa que a parede do tubo ({e_tubo:m:2})"
+
+fluxo:
+  # Testa: placa transversal ao eixo, de x = -Parede a 0, com um furo por tubo.
+  - testa = extrudar(retangulo(Parede, 2 * w_testa, [-Parede/2, 0, z_base]), Ht)
+  - furo = cilindro(De, Parede + 0.10, [-Parede - 0.05, 0, CotaFundo + D/2], "x")
+  - escolha: Tipo
+    casos:
+      Simples:
+        - ys = [0]
+      Duplo:
+        - ys = [-passo/2, passo/2]
+      Triplo:
+        - ys = [-passo, 0, passo]
+  - furos = vazio()
+  - para cada: i em intervalo(0, tamanho(ys))
+    faca:
+      - furos = unir(furos, mover(furo, 0, ys[i], 0))
+      - conector("tubo_" + (i + 1), [-Parede, ys[i], CotaFundo + D/2], [-1, 0, 0], D, "tubo")
+  - testa = subtrair(testa, furos)
+
+  # Alas: perfil em planta da ala direita (y > 0); a esquerda é o espelho em y.
+  # A face interna parte de (0, w_in) com a abertura AngAla; a externa encosta na testa em x = 0.
+  - u = [cos(a), sin(a), 0]
+  - nrm = [-sin(a), cos(a), 0]
+  - A = [0, w_in, z_base]
+  - Bp = A + CompAla * u
+  - C = Bp + Parede * nrm
+  - Dp = A + Parede * nrm + (Parede * tan(a)) * u
+  - rampa = plano3([0, -1, CotaTopo], [0, 1, CotaTopo], [x_fim, 0, z_fim])
+  - ala_d = cortar(extrudar(polilinha([A, Bp, C, Dp]), Ht), rampa)
+  - ala_e = cortar(extrudar(polilinha([[A.x, -A.y, z_base], [Bp.x, -Bp.y, z_base], [C.x, -C.y, z_base], [Dp.x, -Dp.y, z_base]]), Ht), rampa)
+
+  # Soleira entre as faces internas das alas, com o topo na elevação de fundo do tubo.
+  - soleira = extrudar(polilinha([[0, -w_in], [x_fim, -(w_in + CompAla * sin(a))], [x_fim, w_in + CompAla * sin(a)], [0, w_in]], z = z_base), Soleira)
+
+  - conector("jusante", [x_fim, 0, CotaFundo], [1, 0, 0], D, "valeta")
+  - expor_solido("testa", testa, "Concreto")
+  - expor_solido("alas", unir(ala_d, ala_e), "Concreto")
+  - expor_solido("soleira", soleira, "Concreto")
+
+saidas:
+  hidraulica:
+    swmm_juncao:
+      cota_fundo: CotaFundo
+      profundidade_maxima: CotaTopo - CotaFundo
+  quantitativos:
+    testa_m3:
+      valor: vol_testa
+      descricao: Concreto da testa, descontados os furos
+    alas_m3:
+      valor: vol_alas
+      descricao: Concreto das duas alas (altura média entre a testa e a ponta; aproximado)
+    soleira_m3:
+      valor: vol_soleira
+      descricao: Concreto da soleira entre as alas
+    concreto_m3: vol_testa + vol_alas + vol_soleira
+    tubos_un: n_tubos
