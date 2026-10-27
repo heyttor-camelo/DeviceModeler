@@ -9,6 +9,24 @@ Máquinas: **trabalho** (Civil 3D 2026 build 25.1.179, .NET 10) · **PC de casa*
 
 ---
 
+## 2026-10-27 — notebook (Inventor/IPE: estruturas com pontos de conexão)
+
+- Instalados no notebook o Inventor Professional 2026.4 e o add-in Infrastructure Part Shape Utilities.
+- O trabalho foi no **Civil3D2026Plugin** (não neste repositório). O método está em
+  `docs/CATALOGO-PONTOS-CONEXAO.md` e os scripts em `tools/inventor/` (`New-BldcShape.ps1`,
+  `ipe-catalogo/`).
+- Descobertas:
+  - pontos de conexão no Civil 3D = Reference Points no .ipt;
+  - `param.xml` em cm;
+  - a estrutura é a montagem moldura + caixa + tampa em `ContentLibrary\Templates\<id>`;
+  - famílias do Part Builder não guardam pontos.
+- No catálogo **FDX Metric Structures** (capítulo CSBIM-DRENAGEM) entraram `BLDC_IPE` e
+  `BLSC_IPE`, com inserção na face da guia. Os backups estão em `C:\Temp\BLDC-IPE\`.
+- Pendências:
+  - rodar `C:\Temp\BLDC-IPE\install-fdx\Limpar-Catalogos-Teste.ps1` com o Civil fechado (move os
+    catálogos FDX-BLD, FDX-IPE e as duas cópias antigas U3929348…/93920319…, e instala `PV_DNIT_IPE`);
+  - ver o que ficou "estranho" na modelagem;
+  - faixas de tamanho (ColumnRangeList) ainda não testadas.
 ## 2026-10-21 — trabalho (sessão de origem do projeto)
 
 - Publicação do repositório no GitHub (`heyttor-camelo/DeviceModeler`, público) com a DLL pronta em
