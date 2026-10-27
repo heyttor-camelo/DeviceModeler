@@ -26,7 +26,9 @@ Máquinas: **trabalho** (Civil 3D 2026 build 25.1.179, .NET 10) · **PC de casa*
   - rodar `C:\Temp\BLDC-IPE\install-fdx\Limpar-Catalogos-Teste.ps1` com o Civil fechado (move os
     catálogos FDX-BLD, FDX-IPE e as duas cópias antigas U3929348…/93920319…, e instala `PV_DNIT_IPE`);
   - ver o que ficou "estranho" na modelagem;
-  - faixas de tamanho (ColumnRangeList) ainda não testadas.
+  - faixas de tamanho (ColumnRangeList) ainda não testadas;
+  - estudar como mudar a cor dos grips (pedido do Heyvid): GRIPCOLOR/GRIPHOT/GRIPHOVER/GRIPCONTOUR do
+    AutoCAD, os grips próprios das estruturas do Civil e o GripOverrule do HYDRO.
 ## 2026-10-21 — trabalho (sessão de origem do projeto)
 
 - Publicação do repositório no GitHub (`heyttor-camelo/DeviceModeler`, público) com a DLL pronta em
